@@ -1,4 +1,4 @@
-// Package config 读取 Nexus Control 的进程配置。
+// Package config 加载 .env 并读取 Nexus Control 的进程配置。
 package config
 
 import (
@@ -36,11 +36,13 @@ type Config struct {
 
 // Load 从环境变量读取配置。
 func Load() Config {
-	dataDir := env("CONTROL_DATA_DIR", "./data")
+	_ = LoadDotEnv()
+	homeDir, _ := os.UserHomeDir()
+	dataDir := env("CONTROL_DATA_DIR", filepath.Join(homeDir, ".nexus", "control"))
 	return Config{
 		Address:              env("CONTROL_ADDRESS", "0.0.0.0:8020"),
 		DatabaseDriver:       strings.ToLower(env("CONTROL_DATABASE_DRIVER", "sqlite")),
-		DatabaseURL:          env("CONTROL_DATABASE_URL", filepath.Join(dataDir, "control.db")),
+		DatabaseURL:          env("CONTROL_DATABASE_URL", filepath.Join(dataDir, "data", "control.db")),
 		APIBase:              env("CONTROL_API_BASE", "/api/control/v1"),
 		WebAuthBase:          env("CONTROL_WEB_AUTH_BASE", "/auth/v1"),
 		ServiceToken:         strings.TrimSpace(os.Getenv("CONTROL_SERVICE_TOKEN")),

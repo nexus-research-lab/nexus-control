@@ -7,6 +7,30 @@ import (
 	"time"
 )
 
+func TestLoadDefaultsDataDirToNexusControlDirectory(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+	for _, name := range []string{
+		"CONTROL_DATA_DIR",
+		"CONTROL_DATABASE_URL",
+		"CONTROL_SERVICE_TOKEN_FILE",
+		"CONTROL_SIGNING_KEY_FILE",
+		"CONTROL_SIGNING_PUBLIC_KEY_FILE",
+	} {
+		t.Setenv(name, "")
+	}
+
+	dataDir := filepath.Join(homeDir, ".nexus", "control")
+	config := Load()
+	if config.DatabaseURL != filepath.Join(dataDir, "data", "control.db") ||
+		config.ServiceTokenFile != filepath.Join(dataDir, "control-service.token") ||
+		config.SigningKeyFile != filepath.Join(dataDir, "control-signing.key") ||
+		config.SigningPublicKeyFile != filepath.Join(dataDir, "control-signing.pub") {
+		t.Fatalf("Control 默认数据路径未落在 %q: %+v", dataDir, config)
+	}
+}
+
 func TestLoadPostgresKeepsSecretsInDataDir(t *testing.T) {
 	dataDir := t.TempDir()
 	t.Setenv("CONTROL_DATA_DIR", dataDir)

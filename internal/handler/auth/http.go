@@ -60,6 +60,10 @@ func (s *HTTPServer) mount() {
 	s.router.HandleFunc("GET "+webBase+"/members", s.webMembers)
 	s.router.HandleFunc("POST "+webBase+"/members", s.webCreateMember)
 	s.router.HandleFunc("PATCH "+webBase+"/members/{user_id}", s.webUpdateMember)
+	s.router.HandleFunc("GET "+webBase+"/subscription/overview", s.webSubscriptionOverview)
+	s.router.HandleFunc("POST "+webBase+"/subscription/plans", s.webUpsertSubscriptionPlan)
+	s.router.HandleFunc("PUT "+webBase+"/subscription/plans/{plan_key}", s.webUpsertSubscriptionPlan)
+	s.router.HandleFunc("PUT "+webBase+"/subscription/users/{user_id}", s.webUpdateMemberEntitlement)
 	s.router.HandleFunc("GET "+base+"/health", s.health)
 	s.router.HandleFunc("GET "+base+"/.well-known/principal-key", s.publicKey)
 	s.router.HandleFunc("POST "+base+"/setup/owner", s.setupOwner)
@@ -70,6 +74,10 @@ func (s *HTTPServer) mount() {
 	internal.HandleFunc("GET "+base+"/internal/identity-invalidations", s.internalIdentityInvalidations)
 	internal.HandleFunc("POST "+base+"/internal/humans/verify", s.internalVerifyHuman)
 	internal.HandleFunc("GET "+base+"/internal/users/{user_id}/role", s.internalRole)
+	internal.HandleFunc(
+		"GET "+base+"/internal/deployments/{deployment_id}/users/{user_id}/entitlement",
+		s.internalEntitlement,
+	)
 	s.router.Handle(base+"/internal/", s.requireService(internal))
 }
 
@@ -197,6 +205,19 @@ func (s *HTTPServer) internalRole(w http.ResponseWriter, r *http.Request) {
 	s.writeData(w, r, map[string]string{"role": role})
 }
 
+func (s *HTTPServer) internalEntitlement(w http.ResponseWriter, r *http.Request) {
+	entitlement, err := s.service.EffectiveEntitlement(
+		r.Context(),
+		r.PathValue("deployment_id"),
+		r.PathValue("user_id"),
+	)
+	if err != nil {
+		s.writeServiceError(w, r, err)
+		return
+	}
+	s.writeData(w, r, entitlement)
+}
+
 func (s *HTTPServer) requireService(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !bearerMatches(r, s.config.ServiceToken) {
@@ -238,6 +259,8 @@ func (s *HTTPServer) writeServiceError(w http.ResponseWriter, r *http.Request, e
 		status, code, message = http.StatusConflict, "state_conflict", "当前状态不允许此操作"
 	case errors.Is(err, authservice.ErrNotFound):
 		status, code, message = http.StatusNotFound, "user_not_found", "用户不存在"
+	case errors.Is(err, authservice.ErrPlanNotFound):
+		status, code, message = http.StatusNotFound, "subscription_plan_not_found", "订阅套餐不存在或已归档"
 	case errors.Is(err, authservice.ErrRequestInvalid):
 		status, code, message = http.StatusBadRequest, "request_invalid", "请求参数无效"
 	case errors.Is(err, authservice.ErrRequestNotApplied):

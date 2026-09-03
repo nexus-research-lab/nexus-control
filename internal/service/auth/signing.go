@@ -62,6 +62,7 @@ func (s *Signer) Sign(principal Principal, audience string, now time.Time, ttl t
 		Username: principal.Username, DisplayName: principal.DisplayName,
 		Role: principal.Role, Avatar: principal.Avatar,
 		AuthMethod: principal.AuthMethod, SessionID: principal.SessionID,
+		Entitlement: principal.Entitlement,
 	}
 	payload, err := json.Marshal(claims)
 	if err != nil {

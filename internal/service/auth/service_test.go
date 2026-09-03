@@ -88,6 +88,53 @@ func runControlConformance(t *testing.T, cfg config.Config) {
 	if cursor, cursorErr := service.LatestIdentityInvalidationID(ctx); cursorErr != nil || cursor != events[0].EventID {
 		t.Fatalf("identity invalidation cursor = %d, err = %v", cursor, cursorErr)
 	}
+	limit := int64(4096)
+	overview, err := service.UpsertSubscriptionPlan(ctx, *owner, UpsertSubscriptionPlanInput{
+		PlanKey: "team", DisplayName: "Team", Status: PlanStatusActive,
+		MonthlyTokenLimit: &limit, Notes: "团队套餐", SortOrder: 20,
+	})
+	if err != nil || len(overview.Plans) != 3 || len(overview.Accounts) != 2 {
+		t.Fatalf("subscription overview = %+v, err = %v", overview, err)
+	}
+	overview, err = service.UpdateMemberEntitlement(
+		ctx,
+		*owner,
+		member.UserID,
+		UpdateMemberEntitlementInput{PlanKey: "team"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var memberAccount *SubscriptionAccount
+	for index := range overview.Accounts {
+		if overview.Accounts[index].UserID == member.UserID {
+			memberAccount = &overview.Accounts[index]
+		}
+	}
+	if memberAccount == nil || memberAccount.PlanKey != "team" ||
+		memberAccount.MonthlyTokenLimit == nil || *memberAccount.MonthlyTokenLimit != limit {
+		t.Fatalf("member entitlement = %+v", memberAccount)
+	}
+	entitlementEvents, err := service.ListIdentityInvalidations(ctx, events[0].EventID, 10)
+	if err != nil || len(entitlementEvents) != 1 || entitlementEvents[0].Reason != "entitlement_changed" {
+		t.Fatalf("entitlement events = %+v, err = %v", entitlementEvents, err)
+	}
+	limit = 8192
+	if _, err = service.UpsertSubscriptionPlan(ctx, *owner, UpsertSubscriptionPlanInput{
+		PlanKey: "team", DisplayName: "Team", Status: PlanStatusActive,
+		MonthlyTokenLimit: &limit, Notes: "团队套餐", SortOrder: 20,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	effective, err := service.EffectiveEntitlement(ctx, owner.DeploymentID, member.UserID)
+	if err != nil || effective.MonthlyTokenLimit == nil || *effective.MonthlyTokenLimit != limit {
+		t.Fatalf("effective entitlement = %+v, err = %v", effective, err)
+	}
+	planEvents, err := service.ListIdentityInvalidations(ctx, entitlementEvents[0].EventID, 10)
+	if err != nil || len(planEvents) != 1 || planEvents[0].UserID != member.UserID ||
+		planEvents[0].Reason != "entitlement_changed" {
+		t.Fatalf("plan entitlement events = %+v, err = %v", planEvents, err)
+	}
 	change := ChangePasswordInput{
 		UserID: owner.UserID, RequestID: "password:test-1",
 		CurrentPassword: "password-123", NewPassword: "password-789",
@@ -129,6 +176,8 @@ func TestImportNexusSQLitePreservesUserAndPassword(t *testing.T) {
 	for _, statement := range []string{
 		`CREATE TABLE users (user_id TEXT PRIMARY KEY, username TEXT NOT NULL, display_name TEXT NOT NULL, role TEXT NOT NULL, status TEXT NOT NULL, avatar TEXT, last_login_at DATETIME, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL)`,
 		`CREATE TABLE auth_password_credentials (credential_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, password_hash TEXT NOT NULL, password_algo TEXT NOT NULL, password_updated_at DATETIME NOT NULL, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL)`,
+		`CREATE TABLE subscription_plans (plan_key TEXT PRIMARY KEY, display_name TEXT NOT NULL, status TEXT NOT NULL, monthly_token_limit INTEGER, notes TEXT NOT NULL, sort_order INTEGER NOT NULL, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL)`,
+		`CREATE TABLE user_subscriptions (owner_user_id TEXT PRIMARY KEY, plan_key TEXT NOT NULL, period_start DATETIME, period_end DATETIME, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL)`,
 	} {
 		if _, err = source.ExecContext(ctx, statement); err != nil {
 			t.Fatal(err)
@@ -138,6 +187,12 @@ func TestImportNexusSQLitePreservesUserAndPassword(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err = source.ExecContext(ctx, `INSERT INTO auth_password_credentials VALUES (?, ?, ?, 'argon2id', ?, ?, ?)`, "cred_existing", "user_existing", passwordHash, now, now, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = source.ExecContext(ctx, `INSERT INTO subscription_plans VALUES ('team', 'Team', 'active', 4096, '团队套餐', 20, ?, ?)`, now, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = source.ExecContext(ctx, `INSERT INTO user_subscriptions VALUES ('user_existing', 'team', NULL, NULL, ?, ?)`, now, now); err != nil {
 		t.Fatal(err)
 	}
 	if err = source.Close(); err != nil {
@@ -161,8 +216,33 @@ func TestImportNexusSQLitePreservesUserAndPassword(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if login.Principal.UserID != "user_existing" || login.Principal.Role != RoleOwner {
+	if login.Principal.UserID != "user_existing" || login.Principal.Role != RoleOwner ||
+		login.Principal.Entitlement.PlanKey != "team" ||
+		login.Principal.Entitlement.MonthlyTokenLimit == nil ||
+		*login.Principal.Entitlement.MonthlyTokenLimit != 4096 {
 		t.Fatalf("imported principal = %+v", login.Principal)
+	}
+
+	source, err = sql.Open("sqlite", sourcePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = source.ExecContext(ctx, `UPDATE subscription_plans SET monthly_token_limit = 8192 WHERE plan_key = 'team'`); err != nil {
+		t.Fatal(err)
+	}
+	if err = source.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err = service.ImportNexusSubscriptionsSQLite(ctx, sourcePath); err != nil {
+		t.Fatal(err)
+	}
+	effective, err := service.EffectiveEntitlement(ctx, login.Principal.DeploymentID, login.Principal.UserID)
+	if err != nil || effective.MonthlyTokenLimit == nil || *effective.MonthlyTokenLimit != 8192 {
+		t.Fatalf("reimported entitlement = %+v, err = %v", effective, err)
+	}
+	events, err := service.ListIdentityInvalidations(ctx, 0, 10)
+	if err != nil || len(events) != 1 || events[0].Reason != "entitlement_changed" {
+		t.Fatalf("reimported entitlement events = %+v, err = %v", events, err)
 	}
 }
 

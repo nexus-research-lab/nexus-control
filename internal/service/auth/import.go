@@ -24,16 +24,7 @@ func (s *Service) ImportNexusSQLite(ctx context.Context, sourcePath, deploymentN
 	if !state.SetupRequired {
 		return ErrAlreadySetup
 	}
-	sourcePath = strings.TrimSpace(sourcePath)
-	if sourcePath == "" {
-		return errors.New("源 Nexus SQLite 路径无效")
-	}
-	sourcePath, err = filepath.Abs(sourcePath)
-	if err != nil {
-		return errors.New("源 Nexus SQLite 路径无效")
-	}
-	sourceURL := (&url.URL{Scheme: "file", Path: sourcePath}).String() + "?mode=ro"
-	source, err := sql.Open("sqlite", sourceURL)
+	source, err := openNexusSQLite(sourcePath)
 	if err != nil {
 		return err
 	}
@@ -48,34 +39,182 @@ WHERE u.user_id <> '__system__' ORDER BY u.created_at ASC`)
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
 	items := make([]store.ImportedUserRecord, 0)
 	for rows.Next() {
 		item, scanErr := scanImportedUser(rows)
 		if scanErr != nil {
+			_ = rows.Close()
 			return scanErr
 		}
 		if _, err = normalizeRole(item.Role); err != nil || item.PasswordAlgorithm != "argon2id" {
+			_ = rows.Close()
 			return fmt.Errorf("用户 %s 的角色或密码算法不受支持", item.User.UserID)
 		}
 		item.IdentityID = newID("idn")
 		items = append(items, item)
 	}
 	if err = rows.Err(); err != nil {
+		_ = rows.Close()
+		return err
+	}
+	if err = rows.Close(); err != nil {
 		return err
 	}
 	if len(items) == 0 {
 		return errors.New("源 Nexus 没有可导入的密码用户")
 	}
+	plans, entitlements, err := scanImportedSubscriptions(ctx, source)
+	if err != nil {
+		return err
+	}
 	deploymentName = strings.TrimSpace(deploymentName)
 	if deploymentName == "" {
 		deploymentName = "Nexus"
 	}
-	err = s.repository.ImportDeployment(ctx, newID("dep"), deploymentName, items, s.now())
+	err = s.repository.ImportDeployment(
+		ctx,
+		newID("dep"),
+		deploymentName,
+		items,
+		plans,
+		entitlements,
+		s.now(),
+	)
 	if errors.Is(err, store.ErrAlreadySetup) {
 		return ErrAlreadySetup
 	}
 	return err
+}
+
+// ImportNexusSubscriptionsSQLite 为已迁移账号的 Control 补导套餐与成员额度。
+func (s *Service) ImportNexusSubscriptionsSQLite(ctx context.Context, sourcePath string) error {
+	state, err := s.State(ctx)
+	if err != nil {
+		return err
+	}
+	if state.SetupRequired {
+		return errors.New("Control 尚未初始化，请先执行 import-nexus")
+	}
+	source, err := openNexusSQLite(sourcePath)
+	if err != nil {
+		return err
+	}
+	defer source.Close()
+	plans, entitlements, err := scanImportedSubscriptions(ctx, source)
+	if err != nil {
+		return err
+	}
+	if len(plans) == 0 {
+		return errors.New("源 Nexus 没有可导入的订阅套餐")
+	}
+	return s.repository.ImportSubscriptions(ctx, plans, entitlements, s.now())
+}
+
+func openNexusSQLite(sourcePath string) (*sql.DB, error) {
+	sourcePath = strings.TrimSpace(sourcePath)
+	if sourcePath == "" {
+		return nil, errors.New("源 Nexus SQLite 路径无效")
+	}
+	absolutePath, err := filepath.Abs(sourcePath)
+	if err != nil {
+		return nil, errors.New("源 Nexus SQLite 路径无效")
+	}
+	sourceURL := (&url.URL{Scheme: "file", Path: absolutePath}).String() + "?mode=ro"
+	return sql.Open("sqlite", sourceURL)
+}
+
+func scanImportedSubscriptions(
+	ctx context.Context,
+	source *sql.DB,
+) ([]store.SubscriptionPlanRecord, []store.ImportedEntitlementRecord, error) {
+	hasPlans, err := sqliteTableExists(ctx, source, "subscription_plans")
+	if err != nil || !hasPlans {
+		return nil, nil, err
+	}
+	rows, err := source.QueryContext(ctx, `
+SELECT plan_key, display_name, status, monthly_token_limit, notes, sort_order, created_at, updated_at
+FROM subscription_plans ORDER BY sort_order ASC, plan_key ASC`)
+	if err != nil {
+		return nil, nil, err
+	}
+	plans := make([]store.SubscriptionPlanRecord, 0)
+	for rows.Next() {
+		var plan store.SubscriptionPlanRecord
+		var monthlyLimit sql.NullInt64
+		if err = rows.Scan(
+			&plan.PlanKey,
+			&plan.DisplayName,
+			&plan.Status,
+			&monthlyLimit,
+			&plan.Notes,
+			&plan.SortOrder,
+			&plan.CreatedAt,
+			&plan.UpdatedAt,
+		); err != nil {
+			_ = rows.Close()
+			return nil, nil, err
+		}
+		if monthlyLimit.Valid {
+			plan.MonthlyTokenLimit = &monthlyLimit.Int64
+		}
+		if err = validateImportedSubscriptionPlan(UpsertSubscriptionPlanInput{
+			PlanKey:           plan.PlanKey,
+			DisplayName:       plan.DisplayName,
+			Status:            plan.Status,
+			MonthlyTokenLimit: plan.MonthlyTokenLimit,
+			Notes:             plan.Notes,
+			SortOrder:         plan.SortOrder,
+		}); err != nil {
+			_ = rows.Close()
+			return nil, nil, err
+		}
+		plans = append(plans, plan)
+	}
+	if err = rows.Err(); err != nil {
+		_ = rows.Close()
+		return nil, nil, err
+	}
+	if err = rows.Close(); err != nil {
+		return nil, nil, err
+	}
+	hasEntitlements, err := sqliteTableExists(ctx, source, "user_subscriptions")
+	if err != nil || !hasEntitlements {
+		return plans, nil, err
+	}
+	rows, err = source.QueryContext(ctx, `
+SELECT s.owner_user_id, s.plan_key, s.created_at, s.updated_at
+FROM user_subscriptions s
+JOIN users u ON u.user_id = s.owner_user_id
+WHERE u.user_id <> '__system__'
+ORDER BY s.owner_user_id ASC`)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+	entitlements := make([]store.ImportedEntitlementRecord, 0)
+	for rows.Next() {
+		var entitlement store.ImportedEntitlementRecord
+		if err = rows.Scan(
+			&entitlement.UserID,
+			&entitlement.PlanKey,
+			&entitlement.CreatedAt,
+			&entitlement.UpdatedAt,
+		); err != nil {
+			return nil, nil, err
+		}
+		entitlements = append(entitlements, entitlement)
+	}
+	return plans, entitlements, rows.Err()
+}
+
+func sqliteTableExists(ctx context.Context, source *sql.DB, name string) (bool, error) {
+	var count int
+	err := source.QueryRowContext(
+		ctx,
+		`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?`,
+		name,
+	).Scan(&count)
+	return count == 1, err
 }
 
 func scanImportedUser(row interface{ Scan(...any) error }) (store.ImportedUserRecord, error) {

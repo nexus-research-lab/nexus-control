@@ -185,6 +185,95 @@ paths:
           $ref: "#/components/responses/Error"
         "409":
           $ref: "#/components/responses/Error"
+  /auth/v1/subscription/overview:
+    get:
+      operationId: subscriptionOverview
+      security:
+        - CookieSession: []
+      responses:
+        "200":
+          description: 当前 Deployment 的套餐目录与成员有效额度。
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/SubscriptionOverview"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+  /auth/v1/subscription/plans:
+    post:
+      operationId: createSubscriptionPlan
+      security:
+        - CookieSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "#/components/schemas/UpsertSubscriptionPlanInput"
+                - required: [plan_key]
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+  /auth/v1/subscription/plans/{plan_key}:
+    put:
+      operationId: updateSubscriptionPlan
+      security:
+        - CookieSession: []
+      parameters:
+        - $ref: "#/components/parameters/PlanKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertSubscriptionPlanInput"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+  /auth/v1/subscription/users/{user_id}:
+    put:
+      operationId: updateMemberEntitlement
+      security:
+        - CookieSession: []
+      parameters:
+        - $ref: "#/components/parameters/UserID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMemberEntitlementInput"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
   /api/control/v1/health:
     get:
       operationId: controlHealth
@@ -338,6 +427,35 @@ paths:
       responses:
         "200":
           $ref: "#/components/responses/Success"
+  /api/control/v1/internal/deployments/{deployment_id}/users/{user_id}/entitlement:
+    get:
+      operationId: internalEffectiveEntitlement
+      x-internal: true
+      security:
+        - ServiceToken: []
+      parameters:
+        - name: deployment_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/UserID"
+      responses:
+        "200":
+          description: Nexus 本地运行时投影所需的有效额度。
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Entitlement"
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
 components:
   securitySchemes:
     ServiceToken:
@@ -357,6 +475,13 @@ components:
       required: true
       schema:
         type: string
+    PlanKey:
+      name: plan_key
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"
     RequestID:
       name: request_id
       in: query
@@ -471,6 +596,132 @@ components:
         updated_at:
           type: string
           format: date-time
+    Entitlement:
+      type: object
+      required: [plan_key, plan_name, monthly_token_limit, updated_at]
+      properties:
+        plan_key:
+          type: string
+        plan_name:
+          type: string
+        monthly_token_limit:
+          anyOf:
+            - type: integer
+              format: int64
+              minimum: 0
+            - type: "null"
+        updated_at:
+          type: string
+          format: date-time
+    SubscriptionPlan:
+      type: object
+      required: [plan_key, display_name, status, monthly_token_limit, notes, sort_order]
+      properties:
+        plan_key:
+          type: string
+        display_name:
+          type: string
+        status:
+          type: string
+          enum: [active, archived]
+        monthly_token_limit:
+          anyOf:
+            - type: integer
+              format: int64
+              minimum: 0
+            - type: "null"
+        notes:
+          type: string
+        sort_order:
+          type: integer
+    SubscriptionAccount:
+      type: object
+      required: [user_id, username, display_name, role, user_status, plan_key, plan_name, monthly_token_limit, created_at, updated_at]
+      properties:
+        user_id:
+          type: string
+        username:
+          type: string
+        display_name:
+          type: string
+        role:
+          type: string
+          enum: [owner, admin, member]
+        user_status:
+          type: string
+          enum: [active, revoked]
+        plan_key:
+          type: string
+        plan_name:
+          type: string
+        monthly_token_limit:
+          anyOf:
+            - type: integer
+              format: int64
+              minimum: 0
+            - type: "null"
+        avatar:
+          type: string
+        last_login_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    SubscriptionOverview:
+      type: object
+      required: [plans, accounts, updated_at]
+      properties:
+        plans:
+          type: array
+          items:
+            $ref: "#/components/schemas/SubscriptionPlan"
+        accounts:
+          type: array
+          items:
+            $ref: "#/components/schemas/SubscriptionAccount"
+        updated_at:
+          type: string
+          format: date-time
+    UpsertSubscriptionPlanInput:
+      type: object
+      additionalProperties: false
+      required: [display_name, monthly_token_limit]
+      properties:
+        plan_key:
+          type: string
+          pattern: "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        status:
+          type: string
+          enum: [active, archived]
+          default: active
+        monthly_token_limit:
+          anyOf:
+            - type: integer
+              format: int64
+              minimum: 0
+            - type: "null"
+        notes:
+          type: string
+          maxLength: 4096
+        sort_order:
+          type: integer
+          default: 100
+    UpdateMemberEntitlementInput:
+      type: object
+      additionalProperties: false
+      required: [plan_key]
+      properties:
+        plan_key:
+          type: string
+          pattern: "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"
     ChangePasswordInput:
       type: object
       additionalProperties: false
@@ -501,7 +752,7 @@ components:
           description: 仅 session_revoked 事件携带，用于精确撤销一个浏览器 Session。
         reason:
           type: string
-          enum: [principal_changed, profile_changed, session_revoked]
+          enum: [principal_changed, profile_changed, session_revoked, entitlement_changed]
         created_at:
           type: string
           format: date-time

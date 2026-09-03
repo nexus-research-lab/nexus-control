@@ -106,6 +106,9 @@ func (s *Service) SetupOwner(ctx context.Context, input SetupOwnerInput) (*Princ
 	if err != nil {
 		return nil, err
 	}
+	if err = s.attachEntitlement(ctx, &principal); err != nil {
+		return nil, err
+	}
 	return &principal, nil
 }
 
@@ -129,6 +132,9 @@ func (s *Service) Login(ctx context.Context, input LoginInput) (*LoginResult, er
 	principal := principalFromRecord(record.Principal)
 	principal.AuthMethod = AuthPassword
 	principal.SessionID = newID("sess")
+	if err = s.attachEntitlement(ctx, &principal); err != nil {
+		return nil, err
+	}
 	sessionToken, err := newToken()
 	if err != nil {
 		return nil, err
@@ -171,6 +177,9 @@ func (s *Service) ResolveSession(ctx context.Context, sessionToken string) (*Pri
 		return nil, err
 	}
 	principal := principalFromRecord(*record)
+	if err = s.attachEntitlement(ctx, &principal); err != nil {
+		return nil, err
+	}
 	return &principal, nil
 }
 
@@ -188,6 +197,9 @@ func (s *Service) VerifyBoundHuman(ctx context.Context, userID, sessionID string
 		return nil, err
 	}
 	principal := principalFromRecord(*record)
+	if err = s.attachEntitlement(ctx, &principal); err != nil {
+		return nil, err
+	}
 	return &principal, nil
 }
 

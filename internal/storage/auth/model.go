@@ -9,6 +9,7 @@ var (
 	ErrAlreadySetup     = errors.New("Control owner 已初始化")
 	ErrUsernameConflict = errors.New("用户名已存在")
 	ErrNotFound         = errors.New("记录不存在")
+	ErrPlanNotFound     = errors.New("套餐不存在或已归档")
 	ErrLastOwner        = errors.New("部署必须保留至少一个 active owner")
 	ErrStateConflict    = errors.New("记录已被其他请求修改")
 )
@@ -33,6 +34,44 @@ type PrincipalRecord struct {
 	Avatar       string
 	AuthMethod   string
 	SessionID    string
+}
+
+type SubscriptionPlanRecord struct {
+	DeploymentID      string
+	PlanKey           string
+	DisplayName       string
+	Status            string
+	MonthlyTokenLimit *int64
+	Notes             string
+	SortOrder         int
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+}
+
+type EntitlementRecord struct {
+	DeploymentID      string
+	UserID            string
+	PlanKey           string
+	PlanName          string
+	MonthlyTokenLimit *int64
+	UpdatedAt         time.Time
+}
+
+type SubscriptionAccountRecord struct {
+	DeploymentID         string
+	UserID               string
+	Username             string
+	DisplayName          string
+	Role                 string
+	MembershipStatus     string
+	Avatar               string
+	LastLoginAt          *time.Time
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
+	PlanKey              string
+	PlanName             string
+	MonthlyTokenLimit    *int64
+	EntitlementUpdatedAt time.Time
 }
 
 type DeploymentMemberRecord struct {
@@ -114,6 +153,13 @@ type ImportedUserRecord struct {
 	PasswordUpdatedAt time.Time
 	CredentialCreated time.Time
 	CredentialUpdated time.Time
+}
+
+type ImportedEntitlementRecord struct {
+	UserID    string
+	PlanKey   string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 type PasswordAttempt int

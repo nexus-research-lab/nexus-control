@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- 支持程序启动时从当前目录或上级目录加载 `.env`，并保持显式进程环境变量优先。
+- 将 Control 默认数据目录统一为 `~/.nexus/control`。
+- 将订阅套餐与成员 entitlement 写权威迁入 Control；短期 Principal 携带有效额度，套餐变更通过持久 `entitlement_changed` 序列同步到每个 Nexus 副本，并提供既有 Control 部署的订阅补导命令。
 - 建立独立 Control 服务，承接单部署 owner 初始化、密码登录、Session 与短期签名 Principal。
 - 为 Nexus 的统一 Web Shell 提供同源登录、首次初始化和 Deployment 成员管理 API。
 - 提供现有 Nexus SQLite 账号导入命令，保留 User ID 并统一失效旧 Session。

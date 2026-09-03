@@ -42,11 +42,16 @@ func run(ctx context.Context, args []string, logger *slog.Logger) error {
 		return err
 	}
 	service := authservice.NewService(cfg, database, signer)
-	if len(args) > 0 && args[0] == "import-nexus" {
-		return importNexus(ctx, service, args[1:])
-	}
-	if len(args) > 0 && args[0] != "serve" {
-		return errors.New("仅支持 serve 或 import-nexus")
+	if len(args) > 0 {
+		switch args[0] {
+		case "import-nexus":
+			return importNexus(ctx, service, args[1:])
+		case "import-nexus-subscriptions":
+			return importNexusSubscriptions(ctx, service, args[1:])
+		case "serve":
+		default:
+			return errors.New("仅支持 serve、import-nexus 或 import-nexus-subscriptions")
+		}
 	}
 	if err = initializeOwner(ctx, service); err != nil {
 		return err
@@ -82,6 +87,15 @@ func importNexus(ctx context.Context, service *authservice.Service, args []strin
 		return err
 	}
 	return service.ImportNexusSQLite(ctx, *source, *deploymentName)
+}
+
+func importNexusSubscriptions(ctx context.Context, service *authservice.Service, args []string) error {
+	flags := flag.NewFlagSet("import-nexus-subscriptions", flag.ContinueOnError)
+	source := flags.String("source", "", "旧 Nexus SQLite 数据库路径")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	return service.ImportNexusSubscriptionsSQLite(ctx, *source)
 }
 
 func env(name, fallback string) string {

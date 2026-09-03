@@ -7,6 +7,7 @@
 //   - account.go：Control 状态、owner、用户资料与旧 Nexus 导入事务。
 //   - session.go：登录凭据、Session 创建、解析、触达和撤销。
 //   - member.go / identity_invalidation.go：Deployment 成员事务与同事务身份失效序列。
+//   - entitlement.go：Deployment 套餐、成员有效额度与同事务额度失效事件。
 //   - password.go：密码修改的 exact request 回执与 CAS 提交。
 //
 // [PROTOCOL]: 变更时更新此头部，然后检查父级入口 AGENTS.md（L1）

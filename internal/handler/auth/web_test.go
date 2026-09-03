@@ -178,6 +178,59 @@ func TestWebSetupLoginAndMemberAdministration(t *testing.T) {
 		t.Fatalf("profile status = %d", profile.StatusCode)
 	}
 
+	plan := doWebJSON(t, client, http.MethodPost, server.URL+"/auth/v1/subscription/plans", server.URL, map[string]any{
+		"plan_key": "team", "display_name": "Team", "status": "active",
+		"monthly_token_limit": 4096, "notes": "团队套餐", "sort_order": 20,
+	}, "")
+	defer plan.Body.Close()
+	if plan.StatusCode != http.StatusOK {
+		t.Fatalf("create subscription plan status = %d", plan.StatusCode)
+	}
+	assigned := doWebJSON(
+		t,
+		client,
+		http.MethodPut,
+		server.URL+"/auth/v1/subscription/users/"+setupPayload.Data.UserID,
+		server.URL,
+		map[string]string{"plan_key": "team"},
+		"",
+	)
+	defer assigned.Body.Close()
+	if assigned.StatusCode != http.StatusOK {
+		t.Fatalf("assign subscription status = %d", assigned.StatusCode)
+	}
+	setupPrincipal, err := service.ResolveSession(ctx, setupSessionToken)
+	if err != nil || setupPrincipal == nil {
+		t.Fatalf("resolve setup session: principal = %+v, err = %v", setupPrincipal, err)
+	}
+	entitlementRequest, err := http.NewRequest(
+		http.MethodGet,
+		server.URL+"/api/control/v1/internal/deployments/"+setupPrincipal.DeploymentID+
+			"/users/"+setupPayload.Data.UserID+"/entitlement",
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entitlementRequest.Header.Set("Authorization", "Bearer "+cfg.ServiceToken)
+	entitlementResponse, err := client.Do(entitlementRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer entitlementResponse.Body.Close()
+	var entitlementPayload struct {
+		Data authservice.Entitlement `json:"data"`
+	}
+	if err = json.NewDecoder(entitlementResponse.Body).Decode(&entitlementPayload); err != nil {
+		t.Fatal(err)
+	}
+	if entitlementResponse.StatusCode != http.StatusOK ||
+		entitlementPayload.Data.PlanKey != "team" ||
+		entitlementPayload.Data.MonthlyTokenLimit == nil ||
+		*entitlementPayload.Data.MonthlyTokenLimit != 4096 {
+		t.Fatalf("internal entitlement status = %d, data = %+v", entitlementResponse.StatusCode, entitlementPayload.Data)
+	}
+
 	const settledRequestID = "password-settled-001"
 	if effect := readPasswordEffect(t, client, server.URL, settledRequestID); effect != authservice.PasswordChangeUnknown {
 		t.Fatalf("unknown password effect = %q", effect)
@@ -232,10 +285,6 @@ func TestWebSetupLoginAndMemberAdministration(t *testing.T) {
 		t.Fatalf("new password login status = %d", newLogin.StatusCode)
 	}
 
-	setupPrincipal, err := service.ResolveSession(ctx, setupSessionToken)
-	if err != nil || setupPrincipal == nil {
-		t.Fatalf("resolve setup session: principal = %+v, err = %v", setupPrincipal, err)
-	}
 	logout := doWebJSON(t, client, http.MethodPost, server.URL+"/auth/v1/logout", server.URL, map[string]any{}, "")
 	defer logout.Body.Close()
 	logoutCookies := logout.Cookies()
@@ -247,9 +296,10 @@ func TestWebSetupLoginAndMemberAdministration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(events) != 2 ||
+	if len(events) != 3 ||
 		events[0].Reason != "profile_changed" || events[0].UserID != setupPayload.Data.UserID || events[0].SessionID != "" ||
-		events[1].Reason != "session_revoked" || events[1].SessionID != setupPrincipal.SessionID {
+		events[1].Reason != "entitlement_changed" || events[1].UserID != setupPayload.Data.UserID ||
+		events[2].Reason != "session_revoked" || events[2].SessionID != setupPrincipal.SessionID {
 		t.Fatalf("account invalidations = %+v", events)
 	}
 	removedInternal := doWebJSON(

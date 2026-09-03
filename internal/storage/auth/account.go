@@ -46,6 +46,9 @@ func (r *Repository) CreateOwner(ctx context.Context, record OwnerRecord) error 
 			return err
 		}
 	}
+	if err = r.insertDefaultSubscriptionPlans(ctx, tx, record.DeploymentID, now); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
@@ -137,6 +140,8 @@ func (r *Repository) ImportDeployment(
 	deploymentID string,
 	deploymentName string,
 	items []ImportedUserRecord,
+	plans []SubscriptionPlanRecord,
+	entitlements []ImportedEntitlementRecord,
 	now time.Time,
 ) error {
 	tx, err := r.db.BeginTx(ctx, nil)
@@ -160,12 +165,131 @@ func (r *Repository) ImportDeployment(
 	); err != nil {
 		return err
 	}
+	if err = r.insertDefaultSubscriptionPlans(ctx, tx, deploymentID, now); err != nil {
+		return err
+	}
+	for _, plan := range plans {
+		plan.DeploymentID = deploymentID
+		if err = r.upsertSubscriptionPlan(ctx, tx, plan); err != nil {
+			return err
+		}
+	}
 	for _, item := range items {
 		if err = r.importUser(ctx, tx, deploymentID, item); err != nil {
 			return err
 		}
 	}
+	for _, entitlement := range entitlements {
+		if _, err = tx.ExecContext(ctx, `
+INSERT INTO member_entitlements (deployment_id, user_id, plan_key, created_at, updated_at)
+VALUES (`+r.dialect.BindList(5)+`)`,
+			deploymentID,
+			entitlement.UserID,
+			entitlement.PlanKey,
+			entitlement.CreatedAt,
+			entitlement.UpdatedAt,
+		); err != nil {
+			return err
+		}
+	}
 	return tx.Commit()
+}
+
+// ImportSubscriptions 把旧 Nexus 的套餐与成员额度导入已存在的单 Deployment。
+func (r *Repository) ImportSubscriptions(
+	ctx context.Context,
+	plans []SubscriptionPlanRecord,
+	entitlements []ImportedEntitlementRecord,
+	now time.Time,
+) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err = r.lockControlState(ctx, tx); err != nil {
+		return err
+	}
+	var deploymentID string
+	err = tx.QueryRowContext(ctx, `
+SELECT deployment_id FROM deployments
+WHERE status = 'active'
+ORDER BY created_at ASC
+LIMIT 1`+r.dialect.ForUpdate()).Scan(&deploymentID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	for _, plan := range plans {
+		plan.DeploymentID = deploymentID
+		if err = r.upsertSubscriptionPlan(ctx, tx, plan); err != nil {
+			return err
+		}
+	}
+	for _, entitlement := range entitlements {
+		result, execErr := tx.ExecContext(ctx, `
+INSERT INTO member_entitlements (deployment_id, user_id, plan_key, created_at, updated_at)
+SELECT `+r.dialect.BindList(5)+`
+WHERE EXISTS (
+    SELECT 1 FROM deployment_memberships
+    WHERE deployment_id = `+r.bind(6)+` AND user_id = `+r.bind(7)+`
+)
+ON CONFLICT(deployment_id, user_id) DO UPDATE SET
+    plan_key = excluded.plan_key,
+    updated_at = excluded.updated_at`,
+			deploymentID,
+			entitlement.UserID,
+			entitlement.PlanKey,
+			entitlement.CreatedAt,
+			entitlement.UpdatedAt,
+			deploymentID,
+			entitlement.UserID,
+		)
+		if execErr != nil {
+			return execErr
+		}
+		if count, rowsErr := result.RowsAffected(); rowsErr != nil || count != 1 {
+			return errors.Join(rowsErr, ErrNotFound)
+		}
+	}
+	users, err := r.activeDeploymentUsers(ctx, tx, deploymentID)
+	if err != nil {
+		return err
+	}
+	for _, userID := range users {
+		if err = r.appendIdentityInvalidation(
+			ctx, tx, deploymentID, userID, "", "entitlement_changed", now,
+		); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (r *Repository) activeDeploymentUsers(
+	ctx context.Context,
+	tx *sql.Tx,
+	deploymentID string,
+) ([]string, error) {
+	rows, err := tx.QueryContext(ctx, `
+SELECT user_id FROM deployment_memberships
+WHERE deployment_id = `+r.bind(1)+` AND status = 'active'
+ORDER BY user_id ASC`, deploymentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	users := make([]string, 0)
+	for rows.Next() {
+		var userID string
+		if err = rows.Scan(&userID); err != nil {
+			return nil, err
+		}
+		users = append(users, userID)
+	}
+	return users, rows.Err()
 }
 
 func (r *Repository) importUser(ctx context.Context, tx *sql.Tx, deploymentID string, item ImportedUserRecord) error {
