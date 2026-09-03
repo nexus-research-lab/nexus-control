@@ -1,0 +1,534 @@
+openapi: 3.1.0
+info:
+  title: Nexus Control API
+  version: 1.0.0
+  description: 单 Deployment Control 首版合同。/auth/v1 供 Nexus Web 同源访问；internal 路由只供 Nexus Server 调用。
+servers:
+  - url: /
+paths:
+  /auth/v1/status:
+    get:
+      operationId: webAuthStatus
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+  /auth/v1/login:
+    post:
+      operationId: webLogin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebLoginInput"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "401":
+          $ref: "#/components/responses/Error"
+  /auth/v1/logout:
+    post:
+      operationId: webLogout
+      security:
+        - CookieSession: []
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
+  /auth/v1/setup:
+    post:
+      operationId: webSetup
+      security:
+        - SetupToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetupOwnerInput"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "401":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+  /auth/v1/profile:
+    patch:
+      operationId: webUpdateProfile
+      security:
+        - CookieSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProfileInput"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+  /auth/v1/profile/password:
+    post:
+      operationId: webChangePassword
+      security:
+        - CookieSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordInput"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+  /auth/v1/profile/password/receipt:
+    get:
+      operationId: webPasswordReceipt
+      security:
+        - CookieSession: []
+      parameters:
+        - $ref: "#/components/parameters/RequestID"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+  /auth/v1/profile/password/receipt/not-applied:
+    post:
+      operationId: webSettlePasswordNotApplied
+      security:
+        - CookieSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordReceiptInput"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+  /auth/v1/members:
+    get:
+      operationId: listDeploymentMembers
+      security:
+        - CookieSession: []
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+    post:
+      operationId: createDeploymentMember
+      security:
+        - CookieSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMemberInput"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+  /auth/v1/members/{user_id}:
+    patch:
+      operationId: updateDeploymentMember
+      security:
+        - CookieSession: []
+      parameters:
+        - $ref: "#/components/parameters/UserID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMemberInput"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+  /api/control/v1/health:
+    get:
+      operationId: controlHealth
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+  /api/control/v1/.well-known/principal-key:
+    get:
+      operationId: controlPrincipalKey
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+  /api/control/v1/setup/owner:
+    post:
+      operationId: setupOwner
+      security:
+        - SetupToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetupOwnerInput"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "401":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+  /api/control/v1/internal/state:
+    get:
+      operationId: internalState
+      x-internal: true
+      security:
+        - ServiceToken: []
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+  /api/control/v1/internal/principals/exchange:
+    post:
+      operationId: exchangePrincipal
+      x-internal: true
+      security:
+        - ServiceToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [session_token, audience]
+              properties:
+                session_token:
+                  type: string
+                audience:
+                  type: string
+                  const: nexus-runtime
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+  /api/control/v1/internal/identity-invalidations/latest:
+    get:
+      operationId: latestIdentityInvalidation
+      x-internal: true
+      security:
+        - ServiceToken: []
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+  /api/control/v1/internal/identity-invalidations:
+    get:
+      operationId: listIdentityInvalidations
+      x-internal: true
+      security:
+        - ServiceToken: []
+      parameters:
+        - in: query
+          name: after
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 256
+            default: 256
+      responses:
+        "200":
+          description: 有序身份失效事件；next_cursor 等于最后一个 event_id。
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [events, next_cursor]
+                        properties:
+                          events:
+                            type: array
+                            items:
+                              $ref: "#/components/schemas/IdentityInvalidation"
+                          next_cursor:
+                            type: integer
+                            format: int64
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/control/v1/internal/humans/verify:
+    post:
+      operationId: verifyInteractiveHuman
+      x-internal: true
+      security:
+        - ServiceToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [user_id, session_id, audience]
+              properties:
+                user_id:
+                  type: string
+                session_id:
+                  type: string
+                audience:
+                  type: string
+                  const: nexus-runtime
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "401":
+          $ref: "#/components/responses/Error"
+  /api/control/v1/internal/users/{user_id}/role:
+    get:
+      operationId: internalUserRole
+      x-internal: true
+      security:
+        - ServiceToken: []
+      parameters:
+        - $ref: "#/components/parameters/UserID"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+components:
+  securitySchemes:
+    ServiceToken:
+      type: http
+      scheme: bearer
+    SetupToken:
+      type: http
+      scheme: bearer
+    CookieSession:
+      type: apiKey
+      in: cookie
+      name: nexus_session
+  parameters:
+    UserID:
+      name: user_id
+      in: path
+      required: true
+      schema:
+        type: string
+    RequestID:
+      name: request_id
+      in: query
+      required: true
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+  schemas:
+    SetupOwnerInput:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        display_name:
+          type: string
+        password:
+          type: string
+          minLength: 8
+        deployment_name:
+          type: string
+          maxLength: 128
+    WebLoginInput:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 64
+        password:
+          type: string
+          minLength: 1
+          maxLength: 1024
+    UpdateProfileInput:
+      type: object
+      additionalProperties: false
+      required: [avatar]
+      properties:
+        avatar:
+          type: string
+          maxLength: 255
+    PasswordReceiptInput:
+      type: object
+      additionalProperties: false
+      required: [request_id]
+      properties:
+        request_id:
+          type: string
+          minLength: 8
+          maxLength: 128
+    CreateMemberInput:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 64
+        display_name:
+          type: string
+          maxLength: 128
+        password:
+          type: string
+          minLength: 8
+          maxLength: 1024
+        role:
+          type: string
+          enum: [owner, admin, member]
+          default: member
+    UpdateMemberInput:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        role:
+          type: string
+          enum: [owner, admin, member]
+        status:
+          type: string
+          enum: [active, revoked]
+    DeploymentMember:
+      type: object
+      required: [deployment_id, user_id, username, display_name, role, membership_status, created_at, updated_at]
+      properties:
+        deployment_id:
+          type: string
+        user_id:
+          type: string
+        username:
+          type: string
+        display_name:
+          type: string
+        role:
+          type: string
+          enum: [owner, admin, member]
+        membership_status:
+          type: string
+          enum: [active, revoked]
+        avatar:
+          type: string
+        last_login_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ChangePasswordInput:
+      type: object
+      additionalProperties: false
+      required: [request_id, current_password, new_password]
+      properties:
+        request_id:
+          type: string
+          minLength: 8
+          maxLength: 128
+        current_password:
+          type: string
+        new_password:
+          type: string
+          minLength: 8
+    IdentityInvalidation:
+      type: object
+      required: [event_id, deployment_id, user_id, reason, created_at]
+      properties:
+        event_id:
+          type: integer
+          format: int64
+        deployment_id:
+          type: string
+        user_id:
+          type: string
+        session_id:
+          type: string
+          description: 仅 session_revoked 事件携带，用于精确撤销一个浏览器 Session。
+        reason:
+          type: string
+          enum: [principal_changed, profile_changed, session_revoked]
+        created_at:
+          type: string
+          format: date-time
+    Envelope:
+      type: object
+      required: [code, message, request_id]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        request_id:
+          type: string
+        data: {}
+        details:
+          type: object
+          additionalProperties: true
+  responses:
+    Success:
+      description: 请求成功，业务载荷位于 data。
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Envelope"
+    Error:
+      description: 请求失败。
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Envelope"
