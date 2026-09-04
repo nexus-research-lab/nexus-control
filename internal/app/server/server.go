@@ -47,6 +47,8 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 		"nexus-control 已启动",
 		"address", s.config.Address,
 		"api_base", s.config.APIBase,
+		"log_level", s.config.LogLevel,
+		"log_format", s.config.LogFormat,
 		"principal_public_key", s.service.PublicKey(),
 	)
 	err := s.http.ListenAndServe()

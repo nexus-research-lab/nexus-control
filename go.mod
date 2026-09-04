@@ -6,6 +6,7 @@ require (
 	github.com/jackc/pgx/v5 v5.9.1
 	github.com/pressly/goose/v3 v3.27.0
 	golang.org/x/crypto v0.50.0
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	modernc.org/sqlite v1.46.1
 )
 

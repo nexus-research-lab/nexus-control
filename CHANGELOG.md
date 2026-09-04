@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- 复用 Nexus Server 的结构化日志、终端 pretty 输出与滚动文件策略，并将 Control 日志独立写入 `~/.nexus/control/logs/`。
 - 支持程序启动时从当前目录或上级目录加载 `.env`，并保持显式进程环境变量优先。
 - 将 Control 默认数据目录统一为 `~/.nexus/control`。
 - 将订阅套餐与成员 entitlement 写权威迁入 Control；短期 Principal 携带有效额度，套餐变更通过持久 `entitlement_changed` 序列同步到每个 Nexus 副本，并提供既有 Control 部署的订阅补导命令。

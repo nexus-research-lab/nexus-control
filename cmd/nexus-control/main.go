@@ -12,20 +12,22 @@ import (
 
 	serverapp "github.com/nexus-research-lab/nexus-control/internal/app/server"
 	"github.com/nexus-research-lab/nexus-control/internal/config"
+	"github.com/nexus-research-lab/nexus-control/internal/infra/logx"
 	authservice "github.com/nexus-research-lab/nexus-control/internal/service/auth"
 	"github.com/nexus-research-lab/nexus-control/internal/storage"
 )
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	if err := run(context.Background(), os.Args[1:], logger); err != nil {
-		logger.Error("nexus-control 退出", "error", err)
+	cfg := config.Load()
+	logger := newLogger(cfg)
+	slog.SetDefault(logger)
+	if err := run(context.Background(), os.Args[1:], cfg, logger); err != nil {
+		logger.Error("nexus-control 退出", "err", err)
 		os.Exit(1)
 	}
 }
 
-func run(ctx context.Context, args []string, logger *slog.Logger) error {
-	cfg := config.Load()
+func run(ctx context.Context, args []string, cfg config.Config, logger *slog.Logger) error {
 	if err := cfg.PrepareServiceToken(); err != nil {
 		return err
 	}
@@ -59,6 +61,25 @@ func run(ctx context.Context, args []string, logger *slog.Logger) error {
 	shutdownContext, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	return serverapp.New(cfg, service, logger).ListenAndServe(shutdownContext)
+}
+
+func newLogger(cfg config.Config) *slog.Logger {
+	return logx.New(logx.Options{
+		Service: "nexus-control",
+		Level:   cfg.LogLevel,
+		Format:  cfg.LogFormat,
+		Stdout:  cfg.LogStdout,
+		NoColor: cfg.LogNoColor,
+		File: logx.FileOptions{
+			Enabled:     cfg.LogFileEnabled,
+			Path:        cfg.LogPath,
+			RotateDaily: cfg.LogRotateDaily,
+			MaxSizeMB:   cfg.LogMaxSizeMB,
+			MaxAgeDays:  cfg.LogMaxAgeDays,
+			MaxBackups:  cfg.LogMaxBackups,
+			Compress:    cfg.LogCompress,
+		},
+	})
 }
 
 func initializeOwner(ctx context.Context, service *authservice.Service) error {

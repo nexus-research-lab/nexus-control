@@ -18,6 +18,7 @@
 - `internal/handler/auth/`：浏览器与服务间认证 HTTP 边界。
 - `internal/service/auth/`：账号、成员、Session、entitlement 与 Principal 业务规则。
 - `internal/config/`：从 `./.env`、`../.env` 与进程环境加载配置；显式进程环境优先。
+- `internal/infra/logx/`：与 Nexus Server 同构的结构化日志、终端渲染与滚动文件实现。
 - `internal/storage/auth/`：认证与 entitlement 域查询及事务；`internal/storage/`、`db/` 管理 SQLite/PostgreSQL 连接、方言和迁移。
 - `docs/openapi.yaml`：Control v1 HTTP 合同。
 

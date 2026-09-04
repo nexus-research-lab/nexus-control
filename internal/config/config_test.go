@@ -17,6 +17,18 @@ func TestLoadDefaultsDataDirToNexusControlDirectory(t *testing.T) {
 		"CONTROL_SERVICE_TOKEN_FILE",
 		"CONTROL_SIGNING_KEY_FILE",
 		"CONTROL_SIGNING_PUBLIC_KEY_FILE",
+		"DEBUG",
+		"LOG_LEVEL",
+		"LOG_FORMAT",
+		"LOG_PATH",
+		"LOG_STDOUT",
+		"LOG_NO_COLOR",
+		"LOG_FILE_ENABLED",
+		"LOG_ROTATE_DAILY",
+		"LOG_MAX_SIZE_MB",
+		"LOG_MAX_AGE_DAYS",
+		"LOG_MAX_BACKUPS",
+		"LOG_COMPRESS",
 	} {
 		t.Setenv(name, "")
 	}
@@ -26,8 +38,25 @@ func TestLoadDefaultsDataDirToNexusControlDirectory(t *testing.T) {
 	if config.DatabaseURL != filepath.Join(dataDir, "data", "control.db") ||
 		config.ServiceTokenFile != filepath.Join(dataDir, "control-service.token") ||
 		config.SigningKeyFile != filepath.Join(dataDir, "control-signing.key") ||
-		config.SigningPublicKeyFile != filepath.Join(dataDir, "control-signing.pub") {
+		config.SigningPublicKeyFile != filepath.Join(dataDir, "control-signing.pub") ||
+		config.LogPath != filepath.Join(dataDir, "logs", "logger.log") {
 		t.Fatalf("Control 默认数据路径未落在 %q: %+v", dataDir, config)
+	}
+	if config.LogLevel != "info" || config.LogFormat != "json" ||
+		!config.LogStdout || !config.LogFileEnabled || !config.LogRotateDaily || !config.LogCompress {
+		t.Fatalf("Control 默认日志配置未与 Nexus 对齐: %+v", config)
+	}
+}
+
+func TestLoadDebugUsesPrettyLogging(t *testing.T) {
+	t.Setenv("CONTROL_DATA_DIR", t.TempDir())
+	t.Setenv("DEBUG", "true")
+	t.Setenv("LOG_LEVEL", "")
+	t.Setenv("LOG_FORMAT", "")
+
+	config := Load()
+	if config.LogLevel != "debug" || config.LogFormat != "pretty" {
+		t.Fatalf("debug 日志配置 = %q/%q", config.LogLevel, config.LogFormat)
 	}
 }
 

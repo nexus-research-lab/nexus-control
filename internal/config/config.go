@@ -16,6 +16,17 @@ import (
 // Config 是 Control 的最小运行配置。
 type Config struct {
 	Address              string
+	LogLevel             string
+	LogFormat            string
+	LogPath              string
+	LogStdout            bool
+	LogNoColor           bool
+	LogFileEnabled       bool
+	LogRotateDaily       bool
+	LogMaxSizeMB         int
+	LogMaxAgeDays        int
+	LogMaxBackups        int
+	LogCompress          bool
 	DatabaseDriver       string
 	DatabaseURL          string
 	APIBase              string
@@ -39,8 +50,36 @@ func Load() Config {
 	_ = LoadDotEnv()
 	homeDir, _ := os.UserHomeDir()
 	dataDir := env("CONTROL_DATA_DIR", filepath.Join(homeDir, ".nexus", "control"))
+	debug := envBool("DEBUG", false)
+	logLevel := strings.TrimSpace(os.Getenv("LOG_LEVEL"))
+	if logLevel == "" {
+		if debug {
+			logLevel = "debug"
+		} else {
+			logLevel = "info"
+		}
+	}
+	logFormat := strings.TrimSpace(os.Getenv("LOG_FORMAT"))
+	if logFormat == "" {
+		if debug {
+			logFormat = "pretty"
+		} else {
+			logFormat = "json"
+		}
+	}
 	return Config{
 		Address:              env("CONTROL_ADDRESS", "0.0.0.0:8020"),
+		LogLevel:             logLevel,
+		LogFormat:            logFormat,
+		LogPath:              env("LOG_PATH", filepath.Join(dataDir, "logs", "logger.log")),
+		LogStdout:            envBool("LOG_STDOUT", true),
+		LogNoColor:           envBool("LOG_NO_COLOR", false),
+		LogFileEnabled:       envBool("LOG_FILE_ENABLED", true),
+		LogRotateDaily:       envBool("LOG_ROTATE_DAILY", true),
+		LogMaxSizeMB:         envAnyInt("LOG_MAX_SIZE_MB", 10),
+		LogMaxAgeDays:        envAnyInt("LOG_MAX_AGE_DAYS", 7),
+		LogMaxBackups:        envAnyInt("LOG_MAX_BACKUPS", 7),
+		LogCompress:          envBool("LOG_COMPRESS", true),
 		DatabaseDriver:       strings.ToLower(env("CONTROL_DATABASE_DRIVER", "sqlite")),
 		DatabaseURL:          env("CONTROL_DATABASE_URL", filepath.Join(dataDir, "data", "control.db")),
 		APIBase:              env("CONTROL_API_BASE", "/api/control/v1"),
@@ -154,6 +193,14 @@ func env(name, fallback string) string {
 func envInt(name string, fallback int) int {
 	value, err := strconv.Atoi(strings.TrimSpace(os.Getenv(name)))
 	if err != nil || value <= 0 {
+		return fallback
+	}
+	return value
+}
+
+func envAnyInt(name string, fallback int) int {
+	value, err := strconv.Atoi(strings.TrimSpace(os.Getenv(name)))
+	if err != nil {
 		return fallback
 	}
 	return value
