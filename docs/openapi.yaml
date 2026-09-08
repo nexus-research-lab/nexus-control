@@ -6,6 +6,38 @@ info:
 servers:
   - url: /
 paths:
+  /api/control/v1/internal/members/manage:
+    post:
+      operationId: manageMembersForBoundHuman
+      description: 宿主服务凭据及有效真人 Session 双重校验；部署和角色从 Session 推导。remove 撤销部署访问并保留数据，update/remove 必须提供 inspect 返回的 updated_at Unix 微秒版本。
+      security:
+        - ServiceToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [actor_user_id, session_id, operation]
+              properties:
+                actor_user_id: {type: string}
+                session_id: {type: string}
+                operation: {type: string, enum: [list, create, update, remove]}
+                target: {type: string}
+                expected_version: {type: integer, format: int64}
+                input:
+                  oneOf:
+                    - {$ref: "#/components/schemas/CreateMemberInput"}
+                    - {$ref: "#/components/schemas/UpdateMemberInput"}
+                    - {type: "null"}
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
   /auth/v1/status:
     get:
       operationId: webAuthStatus
@@ -561,6 +593,8 @@ components:
       additionalProperties: false
       minProperties: 1
       properties:
+        display_name: {type: string, minLength: 1, maxLength: 128}
+        expected_version: {type: integer, format: int64}
         role:
           type: string
           enum: [owner, admin, member]

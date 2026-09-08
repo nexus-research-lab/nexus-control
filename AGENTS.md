@@ -28,3 +28,5 @@
 - Go 注释使用中文，保持短函数和明确事务边界。
 - 默认运行 `go test ./...` 与 `go vet ./...`；PostgreSQL 契约测试使用全新的 `CONTROL_TEST_POSTGRES_URL`。
 - 用户可见改动同步更新 `CHANGELOG.md` 的 `## [Unreleased]`。
+
+`internal/handler/auth/member_management.go` 承载 Nexus 宿主的成员操作，要求服务凭据与有效管理员 Session；角色与 Deployment 从 Session 推导，更新使用成员快照版本校验，显示名称变更通知全部有效部署。

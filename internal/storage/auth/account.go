@@ -101,36 +101,8 @@ WHERE user_id = `+r.bind(3)+` AND status = 'active'`, nullableString(avatar), no
 	if count, _ := result.RowsAffected(); count != 1 {
 		return ErrNotFound
 	}
-	rows, err := tx.QueryContext(ctx, `
-SELECT deployment_id FROM deployment_memberships
-WHERE user_id = `+r.bind(1)+` AND status = 'active'`, strings.TrimSpace(userID))
-	if err != nil {
+	if err = r.appendProfileInvalidations(ctx, tx, userID, now); err != nil {
 		return err
-	}
-	var deployments []string
-	for rows.Next() {
-		var deploymentID string
-		if err = rows.Scan(&deploymentID); err != nil {
-			_ = rows.Close()
-			return err
-		}
-		deployments = append(deployments, deploymentID)
-	}
-	if err = rows.Close(); err != nil {
-		return err
-	}
-	for _, deploymentID := range deployments {
-		if err = r.appendIdentityInvalidation(
-			ctx,
-			tx,
-			deploymentID,
-			strings.TrimSpace(userID),
-			"",
-			"profile_changed",
-			now,
-		); err != nil {
-			return err
-		}
 	}
 	return tx.Commit()
 }
@@ -379,4 +351,40 @@ func (r *Repository) importUser(ctx context.Context, tx *sql.Tx, deploymentID st
 		deploymentID, user.UserID, item.Role, membershipStatus, membershipCreated, membershipUpdated,
 	)
 	return err
+}
+
+// appendProfileInvalidations 将全局资料变更通知所有有效部署。
+func (r *Repository) appendProfileInvalidations(ctx context.Context, tx *sql.Tx, userID string, now time.Time) error {
+	rows, err := tx.QueryContext(ctx, `
+SELECT deployment_id FROM deployment_memberships
+WHERE user_id = `+r.bind(1)+` AND status = 'active'`, strings.TrimSpace(userID))
+	if err != nil {
+		return err
+	}
+	var deployments []string
+	for rows.Next() {
+		var deploymentID string
+		if err = rows.Scan(&deploymentID); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		deployments = append(deployments, deploymentID)
+	}
+	if err = rows.Close(); err != nil {
+		return err
+	}
+	for _, deploymentID := range deployments {
+		if err = r.appendIdentityInvalidation(
+			ctx,
+			tx,
+			deploymentID,
+			strings.TrimSpace(userID),
+			"",
+			"profile_changed",
+			now,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
 }

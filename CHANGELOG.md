@@ -4,6 +4,8 @@
 
 ### 新增
 
+- 支持 Nexus 管理员对话中的成员管理，实时复核绑定 Session；支持显示名称修改、版本冲突校验与撤销部署访问。
+
 - Principal exchange 与人类 Session 核验默认支持独立的 `nexus-relay-user` audience，不与 Runtime 或 Node 凭据混用。
 - 新增一次性 `import-control-sqlite` 命令，可将现有 Control SQLite 的身份与 entitlement 原样迁移到空 PostgreSQL，并明确让旧 Session 失效。
 

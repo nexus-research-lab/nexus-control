@@ -10,7 +10,7 @@ import (
 func (r *Repository) ListMembers(ctx context.Context, deploymentID string) ([]DeploymentMemberRecord, error) {
 	rows, err := r.db.QueryContext(ctx, `
 SELECT m.deployment_id, u.user_id, u.username, u.display_name, m.role, m.status,
-       u.avatar, u.last_login_at, u.created_at, u.updated_at
+       u.avatar, u.last_login_at, u.created_at, u.updated_at, m.updated_at
 FROM deployment_memberships m
 JOIN users u ON u.user_id = m.user_id
 WHERE m.deployment_id = `+r.bind(1)+`
@@ -34,7 +34,7 @@ ORDER BY CASE m.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
 func (r *Repository) MemberByID(ctx context.Context, deploymentID, userID string) (*DeploymentMemberRecord, error) {
 	member, err := scanDeploymentMember(r.db.QueryRowContext(ctx, `
 SELECT m.deployment_id, u.user_id, u.username, u.display_name, m.role, m.status,
-       u.avatar, u.last_login_at, u.created_at, u.updated_at
+       u.avatar, u.last_login_at, u.created_at, u.updated_at, m.updated_at
 FROM deployment_memberships m
 JOIN users u ON u.user_id = m.user_id
 WHERE m.deployment_id = `+r.bind(1)+` AND m.user_id = `+r.bind(2), deploymentID, userID))
@@ -94,8 +94,10 @@ func (r *Repository) UpdateMember(
 	userID string,
 	expectedRole string,
 	expectedStatus string,
+	expectedVersion int64,
 	nextRole string,
 	nextStatus string,
+	nextName string,
 	now time.Time,
 ) (*DeploymentMemberRecord, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
@@ -110,7 +112,7 @@ func (r *Repository) UpdateMember(
 	if err != nil {
 		return nil, err
 	}
-	if target.Role != expectedRole || target.MembershipStatus != expectedStatus {
+	if target.Role != expectedRole || target.MembershipStatus != expectedStatus || target.UpdatedAt.UnixMicro() != expectedVersion {
 		return nil, ErrStateConflict
 	}
 	if target.Role == "owner" && target.MembershipStatus == "active" &&
@@ -131,6 +133,18 @@ WHERE deployment_id = `+r.bind(4)+` AND user_id = `+r.bind(5),
 		nextRole, nextStatus, now, deploymentID, userID,
 	); err != nil {
 		return nil, err
+	}
+	if nextName != target.DisplayName {
+		result, updateErr := tx.ExecContext(ctx, `UPDATE users SET display_name = `+r.bind(1)+`, updated_at = `+r.bind(2)+` WHERE user_id = `+r.bind(3)+` AND display_name = `+r.bind(4), nextName, now, userID, target.DisplayName)
+		if updateErr != nil {
+			return nil, updateErr
+		}
+		if count, _ := result.RowsAffected(); count != 1 {
+			return nil, ErrStateConflict
+		}
+		if err = r.appendProfileInvalidations(ctx, tx, userID, now); err != nil {
+			return nil, err
+		}
 	}
 	if nextStatus == "revoked" {
 		if _, err = tx.ExecContext(ctx, `
@@ -157,7 +171,7 @@ WHERE deployment_id = `+r.bind(3)+` AND user_id = `+r.bind(4)+` AND revoked_at I
 	if err = tx.Commit(); err != nil {
 		return nil, err
 	}
-	target.Role, target.MembershipStatus, target.UpdatedAt = nextRole, nextStatus, now
+	target.Role, target.MembershipStatus, target.DisplayName, target.UpdatedAt = nextRole, nextStatus, nextName, now
 	return &target, nil
 }
 
@@ -169,7 +183,7 @@ func (r *Repository) queryDeploymentMember(
 ) (DeploymentMemberRecord, error) {
 	member, err := scanDeploymentMember(tx.QueryRowContext(ctx, `
 SELECT m.deployment_id, u.user_id, u.username, u.display_name, m.role, m.status,
-       u.avatar, u.last_login_at, u.created_at, u.updated_at
+       u.avatar, u.last_login_at, u.created_at, u.updated_at, m.updated_at
 FROM deployment_memberships m
 JOIN users u ON u.user_id = m.user_id
 WHERE m.deployment_id = `+r.bind(1)+` AND m.user_id = `+r.bind(2), deploymentID, userID))
@@ -183,11 +197,15 @@ func scanDeploymentMember(row rowScanner) (DeploymentMemberRecord, error) {
 	var member DeploymentMemberRecord
 	var avatar sql.NullString
 	var lastLogin sql.NullTime
+	var membershipUpdatedAt time.Time
 	err := row.Scan(
 		&member.DeploymentID, &member.UserID, &member.Username, &member.DisplayName,
 		&member.Role, &member.MembershipStatus, &avatar, &lastLogin,
-		&member.CreatedAt, &member.UpdatedAt,
+		&member.CreatedAt, &member.UpdatedAt, &membershipUpdatedAt,
 	)
+	if membershipUpdatedAt.After(member.UpdatedAt) {
+		member.UpdatedAt = membershipUpdatedAt
+	}
 	member.Avatar = avatar.String
 	member.LastLoginAt = nullTimePointer(lastLogin)
 	member.CreatedAt, member.UpdatedAt = member.CreatedAt.UTC(), member.UpdatedAt.UTC()

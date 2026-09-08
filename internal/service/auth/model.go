@@ -115,8 +115,10 @@ type CreateMemberInput struct {
 }
 
 type UpdateMemberInput struct {
-	Role   *string `json:"role"`
-	Status *string `json:"status"`
+	DisplayName     *string `json:"display_name,omitempty"`
+	ExpectedVersion *int64  `json:"expected_version,omitempty"`
+	Role            *string `json:"role"`
+	Status          *string `json:"status"`
 }
 
 // Principal 是 Control 签发给下游服务的短期身份事实。

@@ -73,6 +73,7 @@ func (s *HTTPServer) mount() {
 	internal.HandleFunc("GET "+base+"/internal/identity-invalidations/latest", s.internalLatestIdentityInvalidation)
 	internal.HandleFunc("GET "+base+"/internal/identity-invalidations", s.internalIdentityInvalidations)
 	internal.HandleFunc("POST "+base+"/internal/humans/verify", s.internalVerifyHuman)
+	internal.HandleFunc("POST "+base+"/internal/members/manage", s.internalManageMembers)
 	internal.HandleFunc("GET "+base+"/internal/users/{user_id}/role", s.internalRole)
 	internal.HandleFunc(
 		"GET "+base+"/internal/deployments/{deployment_id}/users/{user_id}/entitlement",

@@ -81,7 +81,7 @@ func (s *Service) UpdateMember(ctx context.Context, actor Principal, userID stri
 		return nil, ErrForbidden
 	}
 	userID = strings.TrimSpace(userID)
-	if userID == "" || (input.Role == nil && input.Status == nil) {
+	if userID == "" || (input.Role == nil && input.Status == nil && input.DisplayName == nil) {
 		return nil, ErrRequestInvalid
 	}
 	target, err := s.repository.MemberByID(ctx, actor.DeploymentID, userID)
@@ -90,6 +90,16 @@ func (s *Service) UpdateMember(ctx context.Context, actor Principal, userID stri
 	}
 	if err != nil {
 		return nil, err
+	}
+	if input.ExpectedVersion != nil && *input.ExpectedVersion != target.UpdatedAt.UnixMicro() {
+		return nil, ErrConflict
+	}
+	nextName := target.DisplayName
+	if input.DisplayName != nil {
+		nextName = strings.TrimSpace(*input.DisplayName)
+		if nextName == "" || len(nextName) > 128 {
+			return nil, ErrRequestInvalid
+		}
 	}
 	nextRole, nextStatus := target.Role, target.MembershipStatus
 	if input.Role != nil {
@@ -112,8 +122,8 @@ func (s *Service) UpdateMember(ctx context.Context, actor Principal, userID stri
 	}
 	record, err := s.repository.UpdateMember(
 		ctx, actor.DeploymentID, userID,
-		target.Role, target.MembershipStatus,
-		nextRole, nextStatus, s.now(),
+		target.Role, target.MembershipStatus, target.UpdatedAt.UnixMicro(),
+		nextRole, nextStatus, nextName, s.now(),
 	)
 	if errors.Is(err, store.ErrNotFound) {
 		return nil, ErrNotFound
