@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: Nexus Control API
   version: 1.0.0
-  description: 单 Deployment Control 首版合同。/auth/v1 供 Nexus Web 同源访问；internal 路由只供 Nexus Server 调用。
+  description: 单 Deployment Control 首版合同。/auth/v1 供 Nexus Web 同源访问；internal 路由只供受信下游服务调用。
 servers:
   - url: /
 paths:
@@ -332,7 +332,7 @@ paths:
                   type: string
                 audience:
                   type: string
-                  const: nexus-runtime
+                  description: 配置的 Runtime audience，或固定的 nexus-relay-user。
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -410,7 +410,7 @@ paths:
                   type: string
                 audience:
                   type: string
-                  const: nexus-runtime
+                  description: 配置的 Runtime audience，或固定的 nexus-relay-user。
       responses:
         "200":
           $ref: "#/components/responses/Success"

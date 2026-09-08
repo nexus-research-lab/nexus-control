@@ -184,10 +184,6 @@ func (s *HTTPServer) internalVerifyHuman(w http.ResponseWriter, r *http.Request)
 	if !s.decode(w, r, &input) {
 		return
 	}
-	if strings.TrimSpace(input.Audience) != strings.TrimSpace(s.config.PrincipalAudience) {
-		s.writeError(w, r, http.StatusBadRequest, "principal_audience_invalid", "Principal audience 无效")
-		return
-	}
 	token, err := s.service.ExchangeBoundHuman(r.Context(), input.UserID, input.SessionID, input.Audience)
 	if err != nil {
 		s.writeServiceError(w, r, err)

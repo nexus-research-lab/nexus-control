@@ -99,7 +99,7 @@ func Load() Config {
 	}
 }
 
-// PrepareServiceToken 加载或生成 Control 与 Nexus Server 共用的服务凭据文件。
+// PrepareServiceToken 加载或生成 Control 与下游服务共用的服务凭据文件。
 func (c *Config) PrepareServiceToken() error {
 	if strings.TrimSpace(c.ServiceToken) != "" {
 		return nil
@@ -155,8 +155,12 @@ func (c Config) Validate() error {
 	if c.PrincipalTTL > 5*time.Minute {
 		return errors.New("CONTROL_PRINCIPAL_TTL_SECONDS 不能超过 300")
 	}
-	if strings.TrimSpace(c.PrincipalAudience) == "" {
+	runtimeAudience := strings.TrimSpace(c.PrincipalAudience)
+	if runtimeAudience == "" {
 		return errors.New("CONTROL_PRINCIPAL_AUDIENCE 不能为空")
+	}
+	if runtimeAudience == "nexus-relay-user" || runtimeAudience == "nexus-relay-node" {
+		return errors.New("Runtime Principal 不得使用 Relay audience")
 	}
 	return nil
 }

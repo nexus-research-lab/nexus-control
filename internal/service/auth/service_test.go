@@ -70,6 +70,17 @@ func runControlConformance(t *testing.T, cfg config.Config) {
 	if principal.UserID != owner.UserID || claims.UserID != owner.UserID || claims.Audience != "nexus-runtime" {
 		t.Fatalf("principal = %+v, claims = %+v", principal, claims)
 	}
+	relayToken, _, err := service.ExchangePrincipal(ctx, login.SessionToken, "nexus-relay-user")
+	if err != nil || verifyTestPrincipal(t, signer, relayToken).Audience != "nexus-relay-user" {
+		t.Fatalf("relay principal err = %v", err)
+	}
+	relayHumanToken, err := service.ExchangeBoundHuman(ctx, owner.UserID, login.Principal.SessionID, "nexus-relay-user")
+	if err != nil || verifyTestPrincipal(t, signer, relayHumanToken).Audience != "nexus-relay-user" {
+		t.Fatalf("relay human principal err = %v", err)
+	}
+	if _, _, err = service.ExchangePrincipal(ctx, login.SessionToken, "nexus-relay-node"); !errors.Is(err, ErrRequestInvalid) {
+		t.Fatalf("relay node audience err = %v", err)
+	}
 	member, err := service.CreateMember(ctx, *owner, CreateMemberInput{
 		Username: "member", Password: "password-456", Role: RoleMember,
 	})

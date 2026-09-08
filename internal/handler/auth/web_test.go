@@ -203,6 +203,38 @@ func TestWebSetupLoginAndMemberAdministration(t *testing.T) {
 	if err != nil || setupPrincipal == nil {
 		t.Fatalf("resolve setup session: principal = %+v, err = %v", setupPrincipal, err)
 	}
+	verifiedRelayUser := doWebJSON(
+		t,
+		client,
+		http.MethodPost,
+		server.URL+"/api/control/v1/internal/humans/verify",
+		server.URL,
+		map[string]string{
+			"user_id": setupPrincipal.UserID, "session_id": setupPrincipal.SessionID,
+			"audience": "nexus-relay-user",
+		},
+		cfg.ServiceToken,
+	)
+	defer verifiedRelayUser.Body.Close()
+	if verifiedRelayUser.StatusCode != http.StatusOK {
+		t.Fatalf("relay user verify status = %d", verifiedRelayUser.StatusCode)
+	}
+	rejectedRelayNode := doWebJSON(
+		t,
+		client,
+		http.MethodPost,
+		server.URL+"/api/control/v1/internal/humans/verify",
+		server.URL,
+		map[string]string{
+			"user_id": setupPrincipal.UserID, "session_id": setupPrincipal.SessionID,
+			"audience": "nexus-relay-node",
+		},
+		cfg.ServiceToken,
+	)
+	defer rejectedRelayNode.Body.Close()
+	if rejectedRelayNode.StatusCode != http.StatusBadRequest {
+		t.Fatalf("relay node verify status = %d", rejectedRelayNode.StatusCode)
+	}
 	entitlementRequest, err := http.NewRequest(
 		http.MethodGet,
 		server.URL+"/api/control/v1/internal/deployments/"+setupPrincipal.DeploymentID+

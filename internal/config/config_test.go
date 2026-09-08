@@ -29,6 +29,7 @@ func TestLoadDefaultsDataDirToNexusControlDirectory(t *testing.T) {
 		"LOG_MAX_AGE_DAYS",
 		"LOG_MAX_BACKUPS",
 		"LOG_COMPRESS",
+		"CONTROL_PRINCIPAL_AUDIENCE",
 	} {
 		t.Setenv(name, "")
 	}
@@ -45,6 +46,9 @@ func TestLoadDefaultsDataDirToNexusControlDirectory(t *testing.T) {
 	if config.LogLevel != "info" || config.LogFormat != "json" ||
 		!config.LogStdout || !config.LogFileEnabled || !config.LogRotateDaily || !config.LogCompress {
 		t.Fatalf("Control 默认日志配置未与 Nexus 对齐: %+v", config)
+	}
+	if config.PrincipalAudience != "nexus-runtime" {
+		t.Fatalf("Control 默认 Principal audience 无效: %+v", config)
 	}
 }
 
@@ -136,5 +140,31 @@ func TestValidatePostgresURL(t *testing.T) {
 	config.DatabaseURL = "./control.db"
 	if err := config.Validate(); err == nil {
 		t.Fatal("PostgreSQL driver 应拒绝文件路径")
+	}
+}
+
+func TestValidateRuntimePrincipalAudienceRejectsRelayAudiences(t *testing.T) {
+	config := Config{
+		DatabaseDriver:    "sqlite",
+		DatabaseURL:       ":memory:",
+		ServiceToken:      strings.Repeat("s", 32),
+		APIBase:           "/api/control/v1",
+		WebAuthBase:       "/auth/v1",
+		SessionCookieName: "nexus_session",
+		CookieSameSite:    "lax",
+		SessionTTL:        time.Hour,
+		PrincipalTTL:      time.Minute,
+		PrincipalAudience: "nexus-relay-user",
+	}
+	if err := config.Validate(); err == nil {
+		t.Fatal("Runtime 使用 Relay User audience 时应被拒绝")
+	}
+	config.PrincipalAudience = "nexus-relay-node"
+	if err := config.Validate(); err == nil {
+		t.Fatal("Runtime 使用 Relay Node audience 时应被拒绝")
+	}
+	config.PrincipalAudience = "nexus-runtime"
+	if err := config.Validate(); err != nil {
+		t.Fatalf("Runtime Principal audience 被拒绝: %v", err)
 	}
 }

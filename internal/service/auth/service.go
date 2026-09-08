@@ -11,6 +11,8 @@ import (
 	store "github.com/nexus-research-lab/nexus-control/internal/storage/auth"
 )
 
+const relayUserAudience = "nexus-relay-user"
+
 // Service 持有 Control 的认证规则与 Principal 签发入口。
 type Service struct {
 	repository   *store.Repository
@@ -18,7 +20,7 @@ type Service struct {
 	now          func() time.Time
 	sessionTTL   time.Duration
 	principalTTL time.Duration
-	audience     string
+	audiences    map[string]struct{}
 	setupEnabled bool
 }
 
@@ -30,7 +32,10 @@ func NewService(cfg config.Config, database *sql.DB, signer *Signer) *Service {
 		now:          func() time.Time { return time.Now().UTC() },
 		sessionTTL:   cfg.SessionTTL,
 		principalTTL: cfg.PrincipalTTL,
-		audience:     strings.TrimSpace(cfg.PrincipalAudience),
+		audiences: map[string]struct{}{
+			strings.TrimSpace(cfg.PrincipalAudience): {},
+			relayUserAudience:                        {},
+		},
 		setupEnabled: strings.TrimSpace(cfg.SetupToken) != "",
 	}
 }
@@ -212,7 +217,7 @@ func (s *Service) ExchangeBoundHuman(ctx context.Context, userID, sessionID, aud
 	return s.signPrincipal(*principal, audience)
 }
 
-// ExchangePrincipal 为 Nexus Runtime 签发短期身份票据。
+// ExchangePrincipal 为允许的下游服务签发短期身份票据。
 func (s *Service) ExchangePrincipal(ctx context.Context, sessionToken, audience string) (string, *Principal, error) {
 	principal, err := s.ResolveSession(ctx, sessionToken)
 	if err != nil || principal == nil {
@@ -224,7 +229,7 @@ func (s *Service) ExchangePrincipal(ctx context.Context, sessionToken, audience 
 
 func (s *Service) signPrincipal(principal Principal, audience string) (string, error) {
 	audience = strings.TrimSpace(audience)
-	if audience == "" || audience != s.audience {
+	if _, ok := s.audiences[audience]; audience == "" || !ok {
 		return "", errors.Join(ErrRequestInvalid, errors.New("Principal audience 无效"))
 	}
 	return s.signer.Sign(principal, audience, s.now(), s.principalTTL)

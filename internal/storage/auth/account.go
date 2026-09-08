@@ -144,6 +144,34 @@ func (r *Repository) ImportDeployment(
 	entitlements []ImportedEntitlementRecord,
 	now time.Time,
 ) error {
+	return r.importDeployment(ctx, ImportedDeploymentRecord{
+		DeploymentID: deploymentID,
+		Name:         deploymentName,
+		Status:       "active",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}, items, plans, entitlements, true)
+}
+
+// ImportControlDeployment 把旧 Control 的完整账号权威复制到空目标库。
+func (r *Repository) ImportControlDeployment(
+	ctx context.Context,
+	deployment ImportedDeploymentRecord,
+	items []ImportedUserRecord,
+	plans []SubscriptionPlanRecord,
+	entitlements []ImportedEntitlementRecord,
+) error {
+	return r.importDeployment(ctx, deployment, items, plans, entitlements, false)
+}
+
+func (r *Repository) importDeployment(
+	ctx context.Context,
+	deployment ImportedDeploymentRecord,
+	items []ImportedUserRecord,
+	plans []SubscriptionPlanRecord,
+	entitlements []ImportedEntitlementRecord,
+	insertDefaults bool,
+) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -153,7 +181,18 @@ func (r *Repository) ImportDeployment(
 		return err
 	}
 	var count int
-	if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM deployment_memberships WHERE status = 'active'`).Scan(&count); err != nil {
+	if err = tx.QueryRowContext(ctx, `
+SELECT
+    (SELECT COUNT(*) FROM deployments) +
+    (SELECT COUNT(*) FROM users) +
+    (SELECT COUNT(*) FROM identities) +
+    (SELECT COUNT(*) FROM password_credentials) +
+    (SELECT COUNT(*) FROM deployment_memberships) +
+    (SELECT COUNT(*) FROM sessions) +
+    (SELECT COUNT(*) FROM password_change_receipts) +
+    (SELECT COUNT(*) FROM identity_invalidations) +
+    (SELECT COUNT(*) FROM subscription_plans) +
+    (SELECT COUNT(*) FROM member_entitlements)`).Scan(&count); err != nil {
 		return err
 	}
 	if count != 0 {
@@ -161,21 +200,27 @@ func (r *Repository) ImportDeployment(
 	}
 	if _, err = tx.ExecContext(ctx,
 		`INSERT INTO deployments (deployment_id, name, status, created_at, updated_at) VALUES (`+r.dialect.BindList(5)+`)`,
-		deploymentID, deploymentName, "active", now, now,
+		deployment.DeploymentID,
+		deployment.Name,
+		deployment.Status,
+		deployment.CreatedAt,
+		deployment.UpdatedAt,
 	); err != nil {
 		return err
 	}
-	if err = r.insertDefaultSubscriptionPlans(ctx, tx, deploymentID, now); err != nil {
-		return err
+	if insertDefaults {
+		if err = r.insertDefaultSubscriptionPlans(ctx, tx, deployment.DeploymentID, deployment.CreatedAt); err != nil {
+			return err
+		}
 	}
 	for _, plan := range plans {
-		plan.DeploymentID = deploymentID
+		plan.DeploymentID = deployment.DeploymentID
 		if err = r.upsertSubscriptionPlan(ctx, tx, plan); err != nil {
 			return err
 		}
 	}
 	for _, item := range items {
-		if err = r.importUser(ctx, tx, deploymentID, item); err != nil {
+		if err = r.importUser(ctx, tx, deployment.DeploymentID, item); err != nil {
 			return err
 		}
 	}
@@ -183,7 +228,7 @@ func (r *Repository) ImportDeployment(
 		if _, err = tx.ExecContext(ctx, `
 INSERT INTO member_entitlements (deployment_id, user_id, plan_key, created_at, updated_at)
 VALUES (`+r.dialect.BindList(5)+`)`,
-			deploymentID,
+			deployment.DeploymentID,
 			entitlement.UserID,
 			entitlement.PlanKey,
 			entitlement.CreatedAt,
@@ -294,12 +339,20 @@ ORDER BY user_id ASC`, deploymentID)
 
 func (r *Repository) importUser(ctx context.Context, tx *sql.Tx, deploymentID string, item ImportedUserRecord) error {
 	user := item.User
+	identityCreated := item.IdentityCreated
+	if identityCreated.IsZero() {
+		identityCreated = user.CreatedAt
+	}
+	identityUpdated := item.IdentityUpdated
+	if identityUpdated.IsZero() {
+		identityUpdated = user.UpdatedAt
+	}
 	statements := []struct {
 		query string
 		args  []any
 	}{
 		{`INSERT INTO users (user_id, username, display_name, status, avatar, last_login_at, created_at, updated_at) VALUES (` + r.dialect.BindList(8) + `)`, []any{user.UserID, user.Username, user.DisplayName, user.Status, nullableString(user.Avatar), nullableTime(user.LastLoginAt), user.CreatedAt, user.UpdatedAt}},
-		{`INSERT INTO identities (identity_id, user_id, provider, subject, created_at, updated_at) VALUES (` + r.dialect.BindList(6) + `)`, []any{item.IdentityID, user.UserID, "password", user.Username, user.CreatedAt, user.UpdatedAt}},
+		{`INSERT INTO identities (identity_id, user_id, provider, subject, created_at, updated_at) VALUES (` + r.dialect.BindList(6) + `)`, []any{item.IdentityID, user.UserID, "password", user.Username, identityCreated, identityUpdated}},
 		{`INSERT INTO password_credentials (credential_id, user_id, password_hash, password_algo, password_updated_at, created_at, updated_at) VALUES (` + r.dialect.BindList(7) + `)`, []any{item.CredentialID, user.UserID, item.PasswordHash, item.PasswordAlgorithm, item.PasswordUpdatedAt, item.CredentialCreated, item.CredentialUpdated}},
 	}
 	for _, statement := range statements {
@@ -308,12 +361,22 @@ func (r *Repository) importUser(ctx context.Context, tx *sql.Tx, deploymentID st
 		}
 	}
 	membershipStatus := "active"
-	if user.Status != "active" {
+	if item.MembershipStatus != "" {
+		membershipStatus = item.MembershipStatus
+	} else if user.Status != "active" {
 		membershipStatus = "revoked"
+	}
+	membershipCreated := item.MembershipCreated
+	if membershipCreated.IsZero() {
+		membershipCreated = user.CreatedAt
+	}
+	membershipUpdated := item.MembershipUpdated
+	if membershipUpdated.IsZero() {
+		membershipUpdated = user.UpdatedAt
 	}
 	_, err := tx.ExecContext(ctx,
 		`INSERT INTO deployment_memberships (deployment_id, user_id, role, status, created_at, updated_at) VALUES (`+r.dialect.BindList(6)+`)`,
-		deploymentID, user.UserID, item.Role, membershipStatus, user.CreatedAt, user.UpdatedAt,
+		deploymentID, user.UserID, item.Role, membershipStatus, membershipCreated, membershipUpdated,
 	)
 	return err
 }

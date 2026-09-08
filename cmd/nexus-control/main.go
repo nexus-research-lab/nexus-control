@@ -34,6 +34,10 @@ func run(ctx context.Context, args []string, cfg config.Config, logger *slog.Log
 	if err := cfg.Validate(); err != nil {
 		return err
 	}
+	if len(args) > 0 && args[0] == "import-control-sqlite" &&
+		storage.IsSQLiteSQLDriver(storage.NormalizeSQLDriver(cfg.DatabaseDriver)) {
+		return errors.New("import-control-sqlite 的目标必须是 PostgreSQL")
+	}
 	database, err := storage.Open(ctx, cfg)
 	if err != nil {
 		return err
@@ -50,9 +54,11 @@ func run(ctx context.Context, args []string, cfg config.Config, logger *slog.Log
 			return importNexus(ctx, service, args[1:])
 		case "import-nexus-subscriptions":
 			return importNexusSubscriptions(ctx, service, args[1:])
+		case "import-control-sqlite":
+			return importControlSQLite(ctx, service, args[1:])
 		case "serve":
 		default:
-			return errors.New("仅支持 serve、import-nexus 或 import-nexus-subscriptions")
+			return errors.New("仅支持 serve、import-nexus、import-nexus-subscriptions 或 import-control-sqlite")
 		}
 	}
 	if err = initializeOwner(ctx, service); err != nil {
@@ -117,6 +123,15 @@ func importNexusSubscriptions(ctx context.Context, service *authservice.Service,
 		return err
 	}
 	return service.ImportNexusSubscriptionsSQLite(ctx, *source)
+}
+
+func importControlSQLite(ctx context.Context, service *authservice.Service, args []string) error {
+	flags := flag.NewFlagSet("import-control-sqlite", flag.ContinueOnError)
+	source := flags.String("source", "", "旧 Control SQLite 数据库路径")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	return service.ImportControlSQLite(ctx, *source)
 }
 
 func env(name, fallback string) string {

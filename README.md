@@ -1,8 +1,8 @@
 # Nexus Control
 
-Nexus Control 是 Nexus 的账号、部署与服务额度权威。它管理真人用户、密码、浏览器 Session、Deployment、Membership、订阅套餐与成员 entitlement，并向 Nexus Server 签发带有效额度的短期 Principal。
+Nexus Control 是 Nexus 的账号、部署与服务额度权威。它管理真人用户、密码、浏览器 Session、Deployment、Membership、订阅套餐与成员 entitlement，并向 Nexus Server 与 Nexus Relay 签发短期 Principal。
 
-当前首个切片支持单 Deployment，以及 SQLite、PostgreSQL 两种数据库，足以把现有 Web 账号从执行服务中拆出；Hub、Device 和 OAuth 不在这一阶段。页面仍由 Nexus 的同一套 Web Shell 提供，浏览器把登录、首次初始化和成员管理请求直接发到同源 `/auth/v1`，Nexus Server 只验证 Control 签发的短期 Principal。
+当前首个切片支持单 Deployment，以及 SQLite、PostgreSQL 两种数据库，足以把现有 Web 账号从执行服务中拆出；Relay 的 Room/Message、Device 和 OAuth 不在本仓实现。页面仍由 Nexus 的同一套 Web Shell 提供，浏览器把登录、首次初始化和成员管理请求直接发到同源 `/auth/v1`，下游服务只验证 Control 签发的短期 Principal。
 
 ## 启动
 
@@ -21,7 +21,7 @@ PostgreSQL 表固定写入 `control` schema；连接会强制使用该 `search_p
 
 首次 owner 可在 Nexus Web 的 `/setup` 页面创建，也可由安装器调用 `POST /api/control/v1/setup/owner`，或设置 `AUTH_INIT_OWNER_PASSWORD` 由服务启动时初始化。Web 初始化需额外设置至少 32 个字符的 `CONTROL_SETUP_TOKEN`；该 capability 不会保存在浏览器中。owner/admin 登录后可在 Nexus 设置页管理 Deployment 成员、订阅套餐和成员额度。
 
-签名私钥默认生成到 `CONTROL_DATA_DIR` 下的 `control-signing.key`，公钥写入 `control-signing.pub`，供 Nexus Server 只读加载。生产网关只需同源转发 `/auth/v1/*` 到 Control、`/nexus/v1/*` 到 Nexus Server；`/api/control/v1/internal/*` 不应暴露到公网。
+签名私钥默认生成到 `CONTROL_DATA_DIR` 下的 `control-signing.key`，公钥写入 `control-signing.pub`，供 Nexus Server 与 Nexus Relay 只读加载。Runtime audience 默认为 `nexus-runtime`，Relay User audience 固定为 `nexus-relay-user`；Relay Node 凭据不属于本阶段。生产网关只需同源转发 `/auth/v1/*` 到 Control、`/nexus/v1/*` 到 Nexus Server；`/api/control/v1/internal/*` 不应暴露到公网。
 
 HTTP 合同位于 [`docs/openapi.yaml`](./docs/openapi.yaml)。浏览器登录、登出、资料、密码、初始化、成员和订阅运营位于 `/auth/v1`；服务间 API 位于 `/api/control/v1/internal`，只保留 Principal exchange、人类 Session 核验、角色/有效额度读取和身份失效序列，并且只接受 `CONTROL_SERVICE_TOKEN`。Nexus Server 不再提供或代理账号、套餐或成员额度写接口。
 
@@ -50,3 +50,17 @@ go run ./cmd/nexus-control import-nexus-subscriptions \
 如需对 PostgreSQL 运行同一套认证契约测试，请让 `CONTROL_TEST_POSTGRES_URL` 指向一个全新的临时数据库后运行 `go test ./internal/service/auth -run TestPostgresControlConformance -count=1`。
 
 完整停机、验收和回滚步骤由 Nexus 仓的 `docs/operations/control-migration.md` 维护。
+
+## 从 Control SQLite 迁移到 PostgreSQL
+
+先停止旧 Control 并备份 SQLite 文件，再让目标配置指向一个空的 PostgreSQL `control` schema：
+
+```bash
+CONTROL_DATABASE_DRIVER=postgres \
+CONTROL_DATABASE_URL='postgres://nexus_control:password@postgres:5432/nexus' \
+go run ./cmd/nexus-control import-control-sqlite \
+  --source /path/to/control.db
+```
+
+命令以只读方式打开源 SQLite，并原样保留 Deployment ID、User ID、账号资料与状态、密码哈希、Membership、订阅套餐和成员 entitlement。Session、密码修改回执与旧失效事件不迁移，切换后用户必须重新登录。目标只要已有任何 Control 业务数据便拒绝导入，成功后重复执行也会拒绝，避免生成第二套身份。
+源库必须已经由同版本 Control 完成 migration；未知的新旧 schema 会直接拒绝，避免静默漏字段。

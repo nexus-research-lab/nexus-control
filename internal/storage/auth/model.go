@@ -146,13 +146,26 @@ type LoginRecord struct {
 type ImportedUserRecord struct {
 	User              UserRecord
 	Role              string
+	MembershipStatus  string
+	MembershipCreated time.Time
+	MembershipUpdated time.Time
 	IdentityID        string
+	IdentityCreated   time.Time
+	IdentityUpdated   time.Time
 	CredentialID      string
 	PasswordHash      string
 	PasswordAlgorithm string
 	PasswordUpdatedAt time.Time
 	CredentialCreated time.Time
 	CredentialUpdated time.Time
+}
+
+type ImportedDeploymentRecord struct {
+	DeploymentID string
+	Name         string
+	Status       string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
 
 type ImportedEntitlementRecord struct {
