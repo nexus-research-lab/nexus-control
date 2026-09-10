@@ -56,6 +56,14 @@ type DeploymentMember struct {
 	UpdatedAt        time.Time  `json:"updated_at"`
 }
 
+// MemberDirectoryEntry 是普通成员可见的最小 Deployment 人员目录。
+type MemberDirectoryEntry struct {
+	UserID      string `json:"user_id"`
+	Username    string `json:"username"`
+	DisplayName string `json:"display_name"`
+	Avatar      string `json:"avatar,omitempty"`
+}
+
 // Entitlement 是 Control 签发并投影给 Nexus 的有效服务额度。
 type Entitlement struct {
 	PlanKey           string    `json:"plan_key"`

@@ -58,6 +58,7 @@ func (s *HTTPServer) mount() {
 	s.router.HandleFunc("GET "+webBase+"/profile/password/receipt", s.webPasswordReceipt)
 	s.router.HandleFunc("POST "+webBase+"/profile/password/receipt/not-applied", s.webPasswordSettle)
 	s.router.HandleFunc("GET "+webBase+"/members", s.webMembers)
+	s.router.HandleFunc("GET "+webBase+"/directory/members", s.webMemberDirectory)
 	s.router.HandleFunc("POST "+webBase+"/members", s.webCreateMember)
 	s.router.HandleFunc("PATCH "+webBase+"/members/{user_id}", s.webUpdateMember)
 	s.router.HandleFunc("GET "+webBase+"/subscription/overview", s.webSubscriptionOverview)

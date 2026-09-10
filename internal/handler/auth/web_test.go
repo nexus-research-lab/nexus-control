@@ -99,6 +99,37 @@ func TestWebSetupLoginAndMemberAdministration(t *testing.T) {
 	if createdPayload.Data.UserID == "" || createdPayload.Data.Role != authservice.RoleMember {
 		t.Fatalf("created member = %+v", createdPayload.Data)
 	}
+	memberJar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	memberClient := &http.Client{Jar: memberJar}
+	memberLogin := doWebJSON(t, memberClient, http.MethodPost, server.URL+"/auth/v1/login", server.URL, map[string]any{
+		"username": "member", "password": "password-456",
+	}, "")
+	memberLogin.Body.Close()
+	directory, err := memberClient.Get(server.URL + "/auth/v1/directory/members")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer directory.Body.Close()
+	var directoryPayload struct {
+		Data []authservice.MemberDirectoryEntry `json:"data"`
+	}
+	if err = json.NewDecoder(directory.Body).Decode(&directoryPayload); err != nil {
+		t.Fatal(err)
+	}
+	if directory.StatusCode != http.StatusOK || len(directoryPayload.Data) != 2 {
+		t.Fatalf("member directory status = %d, data = %+v", directory.StatusCode, directoryPayload.Data)
+	}
+	adminOnly, err := memberClient.Get(server.URL + "/auth/v1/members")
+	if err != nil {
+		t.Fatal(err)
+	}
+	adminOnly.Body.Close()
+	if adminOnly.StatusCode != http.StatusForbidden {
+		t.Fatalf("member administration status = %d", adminOnly.StatusCode)
+	}
 
 	listed, err := client.Get(server.URL + "/auth/v1/members")
 	if err != nil {
@@ -121,6 +152,20 @@ func TestWebSetupLoginAndMemberAdministration(t *testing.T) {
 	defer revoked.Body.Close()
 	if revoked.StatusCode != http.StatusOK {
 		t.Fatalf("revoke member status = %d", revoked.StatusCode)
+	}
+	activeDirectory, err := client.Get(server.URL + "/auth/v1/directory/members")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer activeDirectory.Body.Close()
+	var activeDirectoryPayload struct {
+		Data []authservice.MemberDirectoryEntry `json:"data"`
+	}
+	if err = json.NewDecoder(activeDirectory.Body).Decode(&activeDirectoryPayload); err != nil {
+		t.Fatal(err)
+	}
+	if len(activeDirectoryPayload.Data) != 1 || activeDirectoryPayload.Data[0].UserID != setupPayload.Data.UserID {
+		t.Fatalf("active member directory = %+v", activeDirectoryPayload.Data)
 	}
 	invalidationRequest, err := http.NewRequest(
 		http.MethodGet,
@@ -154,12 +199,12 @@ func TestWebSetupLoginAndMemberAdministration(t *testing.T) {
 		)
 	}
 
-	memberLogin := doWebJSON(t, client, http.MethodPost, server.URL+"/auth/v1/login", server.URL, map[string]any{
+	revokedMemberLogin := doWebJSON(t, client, http.MethodPost, server.URL+"/auth/v1/login", server.URL, map[string]any{
 		"username": "member", "password": "password-456",
 	}, "")
-	defer memberLogin.Body.Close()
-	if memberLogin.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("revoked member login status = %d", memberLogin.StatusCode)
+	defer revokedMemberLogin.Body.Close()
+	if revokedMemberLogin.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("revoked member login status = %d", revokedMemberLogin.StatusCode)
 	}
 
 	crossOrigin := doWebJSON(t, client, http.MethodPost, server.URL+"/auth/v1/members", "https://evil.example", map[string]any{

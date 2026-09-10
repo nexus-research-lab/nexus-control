@@ -31,6 +31,29 @@ ORDER BY CASE m.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
 	return members, rows.Err()
 }
 
+func (r *Repository) ListActiveMembers(ctx context.Context, deploymentID string) ([]DeploymentMemberRecord, error) {
+	rows, err := r.db.QueryContext(ctx, `
+SELECT m.deployment_id, u.user_id, u.username, u.display_name, m.role, m.status,
+       u.avatar, u.last_login_at, u.created_at, u.updated_at, m.updated_at
+FROM deployment_memberships m
+JOIN users u ON u.user_id = m.user_id
+WHERE m.deployment_id = `+r.bind(1)+` AND m.status = 'active' AND u.status = 'active'
+ORDER BY u.display_name ASC, u.username ASC`, deploymentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	members := make([]DeploymentMemberRecord, 0)
+	for rows.Next() {
+		member, scanErr := scanDeploymentMember(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		members = append(members, member)
+	}
+	return members, rows.Err()
+}
+
 func (r *Repository) MemberByID(ctx context.Context, deploymentID, userID string) (*DeploymentMemberRecord, error) {
 	member, err := scanDeploymentMember(r.db.QueryRowContext(ctx, `
 SELECT m.deployment_id, u.user_id, u.username, u.display_name, m.role, m.status,

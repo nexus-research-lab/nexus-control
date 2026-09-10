@@ -24,6 +24,22 @@ func (s *Service) ListMembers(ctx context.Context, actor Principal) ([]Deploymen
 	return members, nil
 }
 
+// ListMemberDirectory 返回当前 Deployment 可邀请的 active 真人成员。
+func (s *Service) ListMemberDirectory(ctx context.Context, actor Principal) ([]MemberDirectoryEntry, error) {
+	records, err := s.repository.ListActiveMembers(ctx, actor.DeploymentID)
+	if err != nil {
+		return nil, err
+	}
+	members := make([]MemberDirectoryEntry, 0, len(records))
+	for _, record := range records {
+		members = append(members, MemberDirectoryEntry{
+			UserID: record.UserID, Username: record.Username,
+			DisplayName: record.DisplayName, Avatar: record.Avatar,
+		})
+	}
+	return members, nil
+}
+
 // CreateMember 创建密码账号并加入当前 Deployment。
 func (s *Service) CreateMember(ctx context.Context, actor Principal, input CreateMemberInput) (*DeploymentMember, error) {
 	if actor.Role != RoleOwner && actor.Role != RoleAdmin {

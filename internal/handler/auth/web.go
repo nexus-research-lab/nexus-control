@@ -183,6 +183,19 @@ func (s *HTTPServer) webMembers(w http.ResponseWriter, r *http.Request) {
 	s.writeData(w, r, members)
 }
 
+func (s *HTTPServer) webMemberDirectory(w http.ResponseWriter, r *http.Request) {
+	principal, ok := s.requireWebPrincipal(w, r)
+	if !ok {
+		return
+	}
+	members, err := s.service.ListMemberDirectory(r.Context(), *principal)
+	if err != nil {
+		s.writeServiceError(w, r, err)
+		return
+	}
+	s.writeData(w, r, members)
+}
+
 func (s *HTTPServer) webCreateMember(w http.ResponseWriter, r *http.Request) {
 	if !s.requireWebMutationOrigin(w, r) {
 		return

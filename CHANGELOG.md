@@ -4,6 +4,8 @@
 
 ### 新增
 
+- 增加所有已登录用户可读取的最小 Deployment 成员目录，用于在线 Room 邀请且不暴露成员管理字段。
+
 - 支持 Nexus 管理员对话中的成员管理，实时复核绑定 Session；支持显示名称修改、版本冲突校验与撤销部署访问。
 
 - Principal exchange 与人类 Session 核验默认支持独立的 `nexus-relay-user` audience，不与 Runtime 或 Node 凭据混用。

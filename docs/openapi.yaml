@@ -191,6 +191,17 @@ paths:
           $ref: "#/components/responses/Error"
         "409":
           $ref: "#/components/responses/Error"
+  /auth/v1/directory/members:
+    get:
+      operationId: listMemberDirectory
+      description: 返回当前登录用户所在 Deployment 的 active 真人目录，不包含角色、状态或登录时间。
+      security:
+        - CookieSession: []
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "401":
+          $ref: "#/components/responses/Error"
   /auth/v1/members/{user_id}:
     patch:
       operationId: updateDeploymentMember
@@ -630,6 +641,18 @@ components:
         updated_at:
           type: string
           format: date-time
+    MemberDirectoryEntry:
+      type: object
+      required: [user_id, username, display_name]
+      properties:
+        user_id:
+          type: string
+        username:
+          type: string
+        display_name:
+          type: string
+        avatar:
+          type: string
     Entitlement:
       type: object
       required: [plan_key, plan_name, monthly_token_limit, updated_at]
