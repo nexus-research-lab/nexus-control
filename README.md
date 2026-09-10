@@ -1,8 +1,8 @@
 # Nexus Control
 
-Nexus Control 是 Nexus 的账号、部署与服务额度权威。它管理真人用户、密码、浏览器 Session、Deployment、Membership、订阅套餐与成员 entitlement，并向 Nexus Server 与 Nexus Relay 签发短期 Principal。
+Nexus Control 是 Nexus 的账号、组织、部署与服务额度权威。它管理真人用户、密码、浏览器 Session、Deployment、Organization Membership、订阅套餐与成员 entitlement，并向 Nexus Server 与 Nexus Relay 签发短期 Principal。Deployment 表示安装实例，Organization 表示多人协作租户。
 
-当前首个切片支持单 Deployment，以及 SQLite、PostgreSQL 两种数据库，足以把现有 Web 账号从执行服务中拆出；Relay 的 Room/Message、Device 和 OAuth 不在本仓实现。页面仍由 Nexus 的同一套 Web Shell 提供，浏览器把登录、首次初始化和成员管理请求直接发到同源 `/auth/v1`，下游服务只验证 Control 签发的短期 Principal。
+当前首个切片支持单 Deployment、单 active Organization，以及 SQLite、PostgreSQL 两种数据库；成员目录只返回当前 Organization，Principal 同时携带部署和组织边界。受信 Nexus Gateway 在建群前通过 Control internal API 批量校验真人成员归属。Relay 的 Room/Message、Device 和 OAuth 不在本仓实现。
 
 ## 启动
 
@@ -19,7 +19,7 @@ CONTROL_DATABASE_URL=postgres://nexus_control:password@postgres:5432/nexus
 
 PostgreSQL 表固定写入 `control` schema；连接会强制使用该 `search_path`。数据库账号需要能创建该 schema，或由管理员预先创建并授权。签名密钥和服务凭据仍由 `CONTROL_DATA_DIR` 指向的本地持久目录保存，不写入数据库。
 
-首次 owner 可在 Nexus Web 的 `/setup` 页面创建，也可由安装器调用 `POST /api/control/v1/setup/owner`，或设置 `AUTH_INIT_OWNER_PASSWORD` 由服务启动时初始化。Web 初始化需额外设置至少 32 个字符的 `CONTROL_SETUP_TOKEN`；该 capability 不会保存在浏览器中。owner/admin 登录后可在 Nexus 设置页管理 Deployment 成员、订阅套餐和成员额度。
+首次 owner 可在 Nexus Web 的 `/setup` 页面创建，也可由安装器调用 `POST /api/control/v1/setup/owner`，或设置 `AUTH_INIT_OWNER_PASSWORD` 由服务启动时初始化。Web 初始化需额外设置至少 32 个字符的 `CONTROL_SETUP_TOKEN`；该 capability 不会保存在浏览器中。owner/admin 登录后可在 Nexus 设置页创建一次性 Organization 邀请链接、调整成员角色和访问状态，并管理订阅套餐与成员额度。邀请 token 只在创建响应中返回明文，Control 仅保存哈希；默认七天过期，接受或撤销后不可重用。
 
 签名私钥默认生成到 `CONTROL_DATA_DIR` 下的 `control-signing.key`，公钥写入 `control-signing.pub`，供 Nexus Server 与 Nexus Relay 只读加载。Runtime audience 默认为 `nexus-runtime`，Relay User audience 固定为 `nexus-relay-user`；Relay Node 凭据不属于本阶段。生产网关只需同源转发 `/auth/v1/*` 到 Control、`/nexus/v1/*` 到 Nexus Server；`/api/control/v1/internal/*` 不应暴露到公网。
 
@@ -62,5 +62,5 @@ go run ./cmd/nexus-control import-control-sqlite \
   --source /path/to/control.db
 ```
 
-命令以只读方式打开源 SQLite，并原样保留 Deployment ID、User ID、账号资料与状态、密码哈希、Membership、订阅套餐和成员 entitlement。Session、密码修改回执与旧失效事件不迁移，切换后用户必须重新登录。目标只要已有任何 Control 业务数据便拒绝导入，成功后重复执行也会拒绝，避免生成第二套身份。
+命令以只读方式打开源 SQLite，并原样保留 Deployment、Organization、User、账号资料与状态、密码哈希、Membership、订阅套餐和成员 entitlement。Session、Organization 邀请、密码修改回执与旧失效事件不迁移，切换后用户必须重新登录。目标只要已有任何 Control 业务数据便拒绝导入，成功后重复执行也会拒绝，避免生成第二套身份。
 源库必须已经由同版本 Control 完成 migration；未知的新旧 schema 会直接拒绝，避免静默漏字段。

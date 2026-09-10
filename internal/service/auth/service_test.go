@@ -52,7 +52,8 @@ func runControlConformance(t *testing.T, cfg config.Config) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if owner.Role != RoleOwner || owner.DeploymentID == "" || owner.UserID == "" {
+	if owner.Role != RoleOwner || owner.DeploymentID == "" || owner.OrganizationID == "" ||
+		owner.OrganizationName != "Nexus" || owner.UserID == "" {
 		t.Fatalf("owner = %+v", owner)
 	}
 	if _, err = service.Login(ctx, LoginInput{Username: "admin", Password: "wrong-password"}); !errors.Is(err, ErrInvalidCredentials) {
@@ -67,7 +68,8 @@ func runControlConformance(t *testing.T, cfg config.Config) {
 		t.Fatal(err)
 	}
 	claims := verifyTestPrincipal(t, signer, token)
-	if principal.UserID != owner.UserID || claims.UserID != owner.UserID || claims.Audience != "nexus-runtime" {
+	if principal.UserID != owner.UserID || claims.UserID != owner.UserID ||
+		claims.OrganizationID != owner.OrganizationID || claims.Audience != "nexus-runtime" {
 		t.Fatalf("principal = %+v, claims = %+v", principal, claims)
 	}
 	relayToken, _, err := service.ExchangePrincipal(ctx, login.SessionToken, "nexus-relay-user")

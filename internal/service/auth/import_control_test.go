@@ -180,6 +180,8 @@ func readAuthorityRows(t *testing.T, database *sql.DB) map[string][][]string {
 	t.Helper()
 	queries := map[string]string{
 		"deployments":  `SELECT deployment_id, name, status, created_at, updated_at FROM deployments ORDER BY deployment_id`,
+		"organizations": `SELECT organization_id, deployment_id, name, status, created_at, updated_at FROM organizations ORDER BY organization_id`,
+		"organization_memberships": `SELECT organization_id, user_id, role, status, created_at, updated_at FROM organization_memberships ORDER BY organization_id, user_id`,
 		"users":        `SELECT user_id, username, display_name, status, avatar, last_login_at, created_at, updated_at FROM users ORDER BY user_id`,
 		"identities":   `SELECT identity_id, user_id, provider, subject, created_at, updated_at FROM identities ORDER BY identity_id`,
 		"credentials":  `SELECT credential_id, user_id, password_hash, password_algo, password_updated_at, created_at, updated_at FROM password_credentials ORDER BY credential_id`,

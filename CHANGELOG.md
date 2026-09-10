@@ -6,6 +6,9 @@
 
 ### 新增
 
+- 增加 Deployment 下的 Organization 与组织成员关系；Principal 和成员目录携带当前组织，在线 Room 只能邀请同组织成员。
+- 增加可撤销、限时、单次使用的 Organization 邀请链接；受邀者自行注册，成员管理只作用于当前组织。
+
 - 提供在线 Room 邀请所需的最小成员目录，以及绑定管理员 Session 的对话式成员管理、显示名称修改、版本校验和部署访问撤销。
 - 支持独立的 Relay 用户 Principal audience，隔离运行时与在线协作身份。
 - 提供 Control SQLite 到空 PostgreSQL 的一次性迁移，保留账号和订阅权益并让旧 Session 失效。

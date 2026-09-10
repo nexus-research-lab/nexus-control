@@ -59,6 +59,7 @@ func (s *Signer) Sign(principal Principal, audience string, now time.Time, ttl t
 		Version: 1, Issuer: "nexus-control", Audience: audience,
 		IssuedAt: now.Unix(), ExpiresAt: now.Add(ttl).Unix(),
 		DeploymentID: principal.DeploymentID, UserID: principal.UserID,
+		OrganizationID: principal.OrganizationID, OrganizationName: principal.OrganizationName,
 		Username: principal.Username, DisplayName: principal.DisplayName,
 		Role: principal.Role, Avatar: principal.Avatar,
 		AuthMethod: principal.AuthMethod, SessionID: principal.SessionID,

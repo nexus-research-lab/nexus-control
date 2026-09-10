@@ -82,28 +82,39 @@ func (s *Service) SetupOwner(ctx context.Context, input SetupOwnerInput) (*Princ
 	if len(deploymentName) > 128 {
 		return nil, errors.Join(ErrRequestInvalid, errors.New("Deployment 名称不能超过 128 个字符"))
 	}
+	organizationName := strings.TrimSpace(input.OrganizationName)
+	if organizationName == "" {
+		organizationName = deploymentName
+	}
+	if len(organizationName) > 128 {
+		return nil, errors.Join(ErrRequestInvalid, errors.New("组织名称不能超过 128 个字符"))
+	}
 	passwordHash, err := hashPassword(input.Password)
 	if err != nil {
 		return nil, err
 	}
 	principal := Principal{
-		DeploymentID: newID("dep"),
-		UserID:       newID("user"),
-		Username:     username,
-		DisplayName:  displayName,
-		Role:         RoleOwner,
-		AuthMethod:   AuthPassword,
+		DeploymentID:     newID("dep"),
+		OrganizationID:   newID("org"),
+		OrganizationName: organizationName,
+		UserID:           newID("user"),
+		Username:         username,
+		DisplayName:      displayName,
+		Role:             RoleOwner,
+		AuthMethod:       AuthPassword,
 	}
 	err = s.repository.CreateOwner(ctx, store.OwnerRecord{
-		DeploymentID:   principal.DeploymentID,
-		DeploymentName: deploymentName,
-		UserID:         principal.UserID,
-		IdentityID:     newID("idn"),
-		CredentialID:   newID("cred"),
-		Username:       username,
-		DisplayName:    displayName,
-		PasswordHash:   passwordHash,
-		CreatedAt:      s.now(),
+		DeploymentID:     principal.DeploymentID,
+		DeploymentName:   deploymentName,
+		OrganizationID:   principal.OrganizationID,
+		OrganizationName: organizationName,
+		UserID:           principal.UserID,
+		IdentityID:       newID("idn"),
+		CredentialID:     newID("cred"),
+		Username:         username,
+		DisplayName:      displayName,
+		PasswordHash:     passwordHash,
+		CreatedAt:        s.now(),
 	})
 	if errors.Is(err, store.ErrAlreadySetup) {
 		return nil, ErrAlreadySetup
@@ -277,27 +288,31 @@ func (s *Service) PublicKey() string { return s.signer.PublicKey() }
 
 func principalFromRecord(record store.PrincipalRecord) Principal {
 	return Principal{
-		DeploymentID: record.DeploymentID,
-		UserID:       record.UserID,
-		Username:     record.Username,
-		DisplayName:  record.DisplayName,
-		Role:         record.Role,
-		Avatar:       record.Avatar,
-		AuthMethod:   record.AuthMethod,
-		SessionID:    record.SessionID,
+		DeploymentID:     record.DeploymentID,
+		OrganizationID:   record.OrganizationID,
+		OrganizationName: record.OrganizationName,
+		UserID:           record.UserID,
+		Username:         record.Username,
+		DisplayName:      record.DisplayName,
+		Role:             record.Role,
+		Avatar:           record.Avatar,
+		AuthMethod:       record.AuthMethod,
+		SessionID:        record.SessionID,
 	}
 }
 
 func principalRecord(principal Principal) store.PrincipalRecord {
 	return store.PrincipalRecord{
-		DeploymentID: principal.DeploymentID,
-		UserID:       principal.UserID,
-		Username:     principal.Username,
-		DisplayName:  principal.DisplayName,
-		Role:         principal.Role,
-		Avatar:       principal.Avatar,
-		AuthMethod:   principal.AuthMethod,
-		SessionID:    principal.SessionID,
+		DeploymentID:     principal.DeploymentID,
+		OrganizationID:   principal.OrganizationID,
+		OrganizationName: principal.OrganizationName,
+		UserID:           principal.UserID,
+		Username:         principal.Username,
+		DisplayName:      principal.DisplayName,
+		Role:             principal.Role,
+		Avatar:           principal.Avatar,
+		AuthMethod:       principal.AuthMethod,
+		SessionID:        principal.SessionID,
 	}
 }
 

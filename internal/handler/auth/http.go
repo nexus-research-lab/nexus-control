@@ -61,6 +61,11 @@ func (s *HTTPServer) mount() {
 	s.router.HandleFunc("GET "+webBase+"/directory/members", s.webMemberDirectory)
 	s.router.HandleFunc("POST "+webBase+"/members", s.webCreateMember)
 	s.router.HandleFunc("PATCH "+webBase+"/members/{user_id}", s.webUpdateMember)
+	s.router.HandleFunc("GET "+webBase+"/organization/invitations", s.webListOrganizationInvitations)
+	s.router.HandleFunc("POST "+webBase+"/organization/invitations", s.webCreateOrganizationInvitation)
+	s.router.HandleFunc("DELETE "+webBase+"/organization/invitations/{invitation_id}", s.webRevokeOrganizationInvitation)
+	s.router.HandleFunc("GET "+webBase+"/organization-invitations/{token}", s.webPreviewOrganizationInvitation)
+	s.router.HandleFunc("POST "+webBase+"/organization-invitations/{token}/accept", s.webAcceptOrganizationInvitation)
 	s.router.HandleFunc("GET "+webBase+"/subscription/overview", s.webSubscriptionOverview)
 	s.router.HandleFunc("POST "+webBase+"/subscription/plans", s.webUpsertSubscriptionPlan)
 	s.router.HandleFunc("PUT "+webBase+"/subscription/plans/{plan_key}", s.webUpsertSubscriptionPlan)
@@ -74,6 +79,7 @@ func (s *HTTPServer) mount() {
 	internal.HandleFunc("GET "+base+"/internal/identity-invalidations/latest", s.internalLatestIdentityInvalidation)
 	internal.HandleFunc("GET "+base+"/internal/identity-invalidations", s.internalIdentityInvalidations)
 	internal.HandleFunc("POST "+base+"/internal/humans/verify", s.internalVerifyHuman)
+	internal.HandleFunc("POST "+base+"/internal/organizations/members/verify", s.internalVerifyOrganizationMembers)
 	internal.HandleFunc("POST "+base+"/internal/members/manage", s.internalManageMembers)
 	internal.HandleFunc("GET "+base+"/internal/users/{user_id}/role", s.internalRole)
 	internal.HandleFunc(
@@ -194,6 +200,24 @@ func (s *HTTPServer) internalVerifyHuman(w http.ResponseWriter, r *http.Request)
 	s.writeData(w, r, map[string]string{"principal_token": token})
 }
 
+func (s *HTTPServer) internalVerifyOrganizationMembers(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		DeploymentID   string   `json:"deployment_id"`
+		OrganizationID string   `json:"organization_id"`
+		UserIDs        []string `json:"user_ids"`
+	}
+	if !s.decode(w, r, &input) {
+		return
+	}
+	if err := s.service.VerifyOrganizationMembers(
+		r.Context(), input.DeploymentID, input.OrganizationID, input.UserIDs,
+	); err != nil {
+		s.writeServiceError(w, r, err)
+		return
+	}
+	s.writeData(w, r, map[string]bool{"valid": true})
+}
+
 func (s *HTTPServer) internalRole(w http.ResponseWriter, r *http.Request) {
 	role, err := s.service.ActiveRole(r.Context(), r.PathValue("user_id"))
 	if err != nil {
@@ -259,6 +283,8 @@ func (s *HTTPServer) writeServiceError(w http.ResponseWriter, r *http.Request, e
 		status, code, message = http.StatusNotFound, "user_not_found", "用户不存在"
 	case errors.Is(err, authservice.ErrPlanNotFound):
 		status, code, message = http.StatusNotFound, "subscription_plan_not_found", "订阅套餐不存在或已归档"
+	case errors.Is(err, authservice.ErrInvitationInvalid):
+		status, code, message = http.StatusNotFound, "organization_invitation_invalid", "组织邀请不存在、已过期或已使用"
 	case errors.Is(err, authservice.ErrRequestInvalid):
 		status, code, message = http.StatusBadRequest, "request_invalid", "请求参数无效"
 	case errors.Is(err, authservice.ErrRequestNotApplied):

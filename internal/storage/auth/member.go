@@ -7,15 +7,16 @@ import (
 	"time"
 )
 
-func (r *Repository) ListMembers(ctx context.Context, deploymentID string) ([]DeploymentMemberRecord, error) {
+func (r *Repository) ListMembers(ctx context.Context, deploymentID, organizationID string) ([]DeploymentMemberRecord, error) {
 	rows, err := r.db.QueryContext(ctx, `
-SELECT m.deployment_id, u.user_id, u.username, u.display_name, m.role, m.status,
-       u.avatar, u.last_login_at, u.created_at, u.updated_at, m.updated_at
+SELECT m.deployment_id, u.user_id, u.username, u.display_name, om.role, om.status,
+       u.avatar, u.last_login_at, u.created_at, u.updated_at, om.updated_at
 FROM deployment_memberships m
 JOIN users u ON u.user_id = m.user_id
-WHERE m.deployment_id = `+r.bind(1)+`
-ORDER BY CASE m.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
-         u.username ASC`, deploymentID)
+JOIN organization_memberships om ON om.user_id = m.user_id
+WHERE m.deployment_id = `+r.bind(1)+` AND om.organization_id = `+r.bind(2)+`
+ORDER BY CASE om.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
+         u.username ASC`, deploymentID, organizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -31,14 +32,17 @@ ORDER BY CASE m.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
 	return members, rows.Err()
 }
 
-func (r *Repository) ListActiveMembers(ctx context.Context, deploymentID string) ([]DeploymentMemberRecord, error) {
+func (r *Repository) ListActiveMembers(ctx context.Context, deploymentID, organizationID string) ([]DeploymentMemberRecord, error) {
 	rows, err := r.db.QueryContext(ctx, `
 SELECT m.deployment_id, u.user_id, u.username, u.display_name, m.role, m.status,
        u.avatar, u.last_login_at, u.created_at, u.updated_at, m.updated_at
 FROM deployment_memberships m
 JOIN users u ON u.user_id = m.user_id
-WHERE m.deployment_id = `+r.bind(1)+` AND m.status = 'active' AND u.status = 'active'
-ORDER BY u.display_name ASC, u.username ASC`, deploymentID)
+JOIN organization_memberships om ON om.user_id = m.user_id
+JOIN organizations o ON o.organization_id = om.organization_id AND o.deployment_id = m.deployment_id
+WHERE m.deployment_id = `+r.bind(1)+` AND om.organization_id = `+r.bind(2)+`
+  AND m.status = 'active' AND om.status = 'active' AND o.status = 'active' AND u.status = 'active'
+ORDER BY u.display_name ASC, u.username ASC`, deploymentID, organizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -54,13 +58,15 @@ ORDER BY u.display_name ASC, u.username ASC`, deploymentID)
 	return members, rows.Err()
 }
 
-func (r *Repository) MemberByID(ctx context.Context, deploymentID, userID string) (*DeploymentMemberRecord, error) {
+func (r *Repository) MemberByID(ctx context.Context, deploymentID, organizationID, userID string) (*DeploymentMemberRecord, error) {
 	member, err := scanDeploymentMember(r.db.QueryRowContext(ctx, `
-SELECT m.deployment_id, u.user_id, u.username, u.display_name, m.role, m.status,
-       u.avatar, u.last_login_at, u.created_at, u.updated_at, m.updated_at
+SELECT m.deployment_id, u.user_id, u.username, u.display_name, om.role, om.status,
+       u.avatar, u.last_login_at, u.created_at, u.updated_at, om.updated_at
 FROM deployment_memberships m
 JOIN users u ON u.user_id = m.user_id
-WHERE m.deployment_id = `+r.bind(1)+` AND m.user_id = `+r.bind(2), deploymentID, userID))
+JOIN organization_memberships om ON om.user_id = m.user_id
+WHERE m.deployment_id = `+r.bind(1)+` AND om.organization_id = `+r.bind(2)+`
+  AND m.user_id = `+r.bind(3), deploymentID, organizationID, userID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -95,6 +101,7 @@ VALUES (`+r.dialect.BindList(6)+`) ON CONFLICT(username) DO NOTHING`,
 		{`INSERT INTO identities (identity_id, user_id, provider, subject, created_at, updated_at) VALUES (` + r.dialect.BindList(6) + `)`, []any{record.IdentityID, record.UserID, "password", record.Username, now, now}},
 		{`INSERT INTO password_credentials (credential_id, user_id, password_hash, password_algo, password_updated_at, created_at, updated_at) VALUES (` + r.dialect.BindList(7) + `)`, []any{record.CredentialID, record.UserID, record.PasswordHash, "argon2id", now, now, now}},
 		{`INSERT INTO deployment_memberships (deployment_id, user_id, role, status, created_at, updated_at) VALUES (` + r.dialect.BindList(6) + `)`, []any{record.DeploymentID, record.UserID, record.Role, "active", now, now}},
+		{`INSERT INTO organization_memberships (organization_id, user_id, role, status, created_at, updated_at) VALUES (` + r.dialect.BindList(6) + `)`, []any{record.OrganizationID, record.UserID, record.Role, "active", now, now}},
 	}
 	for _, statement := range statements {
 		if _, err = tx.ExecContext(ctx, statement.query, statement.args...); err != nil {
@@ -114,6 +121,7 @@ VALUES (`+r.dialect.BindList(6)+`) ON CONFLICT(username) DO NOTHING`,
 func (r *Repository) UpdateMember(
 	ctx context.Context,
 	deploymentID string,
+	organizationID string,
 	userID string,
 	expectedRole string,
 	expectedStatus string,
@@ -131,7 +139,7 @@ func (r *Repository) UpdateMember(
 	if err = r.lockDeployment(ctx, tx, deploymentID); err != nil {
 		return nil, err
 	}
-	target, err := r.queryDeploymentMember(ctx, tx, deploymentID, userID)
+	target, err := r.queryOrganizationMember(ctx, tx, deploymentID, organizationID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -142,8 +150,8 @@ func (r *Repository) UpdateMember(
 		(nextRole != "owner" || nextStatus != "active") {
 		var owners int
 		if err = tx.QueryRowContext(ctx, `
-SELECT COUNT(*) FROM deployment_memberships
-WHERE deployment_id = `+r.bind(1)+` AND role = 'owner' AND status = 'active'`, deploymentID).Scan(&owners); err != nil {
+SELECT COUNT(*) FROM organization_memberships
+WHERE organization_id = `+r.bind(1)+` AND role = 'owner' AND status = 'active'`, organizationID).Scan(&owners); err != nil {
 			return nil, err
 		}
 		if owners <= 1 {
@@ -156,6 +164,16 @@ WHERE deployment_id = `+r.bind(4)+` AND user_id = `+r.bind(5),
 		nextRole, nextStatus, now, deploymentID, userID,
 	); err != nil {
 		return nil, err
+	}
+	organizationResult, err := tx.ExecContext(ctx, `
+UPDATE organization_memberships SET role = `+r.bind(1)+`, status = `+r.bind(2)+`, updated_at = `+r.bind(3)+`
+WHERE user_id = `+r.bind(4)+` AND organization_id = `+r.bind(5),
+		nextRole, nextStatus, now, userID, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	if count, rowsErr := organizationResult.RowsAffected(); rowsErr != nil || count != 1 {
+		return nil, errors.Join(rowsErr, ErrStateConflict)
 	}
 	if nextName != target.DisplayName {
 		result, updateErr := tx.ExecContext(ctx, `UPDATE users SET display_name = `+r.bind(1)+`, updated_at = `+r.bind(2)+` WHERE user_id = `+r.bind(3)+` AND display_name = `+r.bind(4), nextName, now, userID, target.DisplayName)
@@ -198,18 +216,21 @@ WHERE deployment_id = `+r.bind(3)+` AND user_id = `+r.bind(4)+` AND revoked_at I
 	return &target, nil
 }
 
-func (r *Repository) queryDeploymentMember(
+func (r *Repository) queryOrganizationMember(
 	ctx context.Context,
 	tx *sql.Tx,
 	deploymentID string,
+	organizationID string,
 	userID string,
 ) (DeploymentMemberRecord, error) {
 	member, err := scanDeploymentMember(tx.QueryRowContext(ctx, `
-SELECT m.deployment_id, u.user_id, u.username, u.display_name, m.role, m.status,
-       u.avatar, u.last_login_at, u.created_at, u.updated_at, m.updated_at
+SELECT m.deployment_id, u.user_id, u.username, u.display_name, om.role, om.status,
+       u.avatar, u.last_login_at, u.created_at, u.updated_at, om.updated_at
 FROM deployment_memberships m
 JOIN users u ON u.user_id = m.user_id
-WHERE m.deployment_id = `+r.bind(1)+` AND m.user_id = `+r.bind(2), deploymentID, userID))
+JOIN organization_memberships om ON om.user_id = m.user_id
+WHERE m.deployment_id = `+r.bind(1)+` AND om.organization_id = `+r.bind(2)+`
+  AND m.user_id = `+r.bind(3), deploymentID, organizationID, userID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return DeploymentMemberRecord{}, ErrNotFound
 	}

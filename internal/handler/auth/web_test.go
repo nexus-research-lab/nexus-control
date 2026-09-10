@@ -60,10 +60,12 @@ func TestWebSetupLoginAndMemberAdministration(t *testing.T) {
 	setupSessionToken := setupCookies[0].Value
 	var setupPayload struct {
 		Data struct {
-			Authenticated bool   `json:"authenticated"`
-			UserID        string `json:"user_id"`
-			Role          string `json:"role"`
-			SetupEnabled  bool   `json:"setup_enabled"`
+			Authenticated    bool   `json:"authenticated"`
+			UserID           string `json:"user_id"`
+			Role             string `json:"role"`
+			SetupEnabled     bool   `json:"setup_enabled"`
+			OrganizationID   string `json:"organization_id"`
+			OrganizationName string `json:"organization_name"`
 		} `json:"data"`
 	}
 	if err = json.NewDecoder(setup.Body).Decode(&setupPayload); err != nil {
@@ -71,7 +73,8 @@ func TestWebSetupLoginAndMemberAdministration(t *testing.T) {
 	}
 	if !setupPayload.Data.Authenticated ||
 		setupPayload.Data.Role != authservice.RoleOwner ||
-		!setupPayload.Data.SetupEnabled {
+		!setupPayload.Data.SetupEnabled || setupPayload.Data.OrganizationID == "" ||
+		setupPayload.Data.OrganizationName != "Nexus" {
 		t.Fatalf("setup payload = %+v", setupPayload.Data)
 	}
 
@@ -98,6 +101,24 @@ func TestWebSetupLoginAndMemberAdministration(t *testing.T) {
 	}
 	if createdPayload.Data.UserID == "" || createdPayload.Data.Role != authservice.RoleMember {
 		t.Fatalf("created member = %+v", createdPayload.Data)
+	}
+	setupPrincipal, err := service.ResolveSession(ctx, setupSessionToken)
+	if err != nil || setupPrincipal == nil {
+		t.Fatalf("resolve setup session: principal = %+v, err = %v", setupPrincipal, err)
+	}
+	now := time.Now().UTC()
+	for _, statement := range []struct {
+		query string
+		args  []any
+	}{
+		{`INSERT INTO organizations (organization_id, deployment_id, name, status, created_at, updated_at) VALUES (?, ?, ?, 'active', ?, ?)`, []any{"org_other", setupPrincipal.DeploymentID, "Other", now, now}},
+		{`INSERT INTO users (user_id, username, display_name, status, created_at, updated_at) VALUES (?, ?, ?, 'active', ?, ?)`, []any{"user_other", "other", "Other", now, now}},
+		{`INSERT INTO deployment_memberships (deployment_id, user_id, role, status, created_at, updated_at) VALUES (?, ?, 'member', 'active', ?, ?)`, []any{setupPrincipal.DeploymentID, "user_other", now, now}},
+		{`INSERT INTO organization_memberships (organization_id, user_id, role, status, created_at, updated_at) VALUES (?, ?, 'member', 'active', ?, ?)`, []any{"org_other", "user_other", now, now}},
+	} {
+		if _, err = database.ExecContext(ctx, statement.query, statement.args...); err != nil {
+			t.Fatal(err)
+		}
 	}
 	memberJar, err := cookiejar.New(nil)
 	if err != nil {
@@ -144,6 +165,41 @@ func TestWebSetupLoginAndMemberAdministration(t *testing.T) {
 	}
 	if listed.StatusCode != http.StatusOK || len(listedPayload.Data) != 2 {
 		t.Fatalf("members status = %d, data = %+v", listed.StatusCode, listedPayload.Data)
+	}
+	crossOrganizationUpdate := doWebJSON(t, client, http.MethodPatch,
+		server.URL+"/auth/v1/members/user_other", server.URL,
+		map[string]any{"role": authservice.RoleAdmin}, "")
+	crossOrganizationUpdate.Body.Close()
+	if crossOrganizationUpdate.StatusCode != http.StatusNotFound {
+		t.Fatalf("cross-organization update status = %d", crossOrganizationUpdate.StatusCode)
+	}
+	verifiedMembers := doWebJSON(
+		t, client, http.MethodPost,
+		server.URL+"/api/control/v1/internal/organizations/members/verify", server.URL,
+		map[string]any{
+			"deployment_id":   setupPrincipal.DeploymentID,
+			"organization_id": setupPrincipal.OrganizationID,
+			"user_ids":        []string{setupPayload.Data.UserID, createdPayload.Data.UserID},
+		},
+		cfg.ServiceToken,
+	)
+	verifiedMembers.Body.Close()
+	if verifiedMembers.StatusCode != http.StatusOK {
+		t.Fatalf("verify organization members status = %d", verifiedMembers.StatusCode)
+	}
+	rejectedMember := doWebJSON(
+		t, client, http.MethodPost,
+		server.URL+"/api/control/v1/internal/organizations/members/verify", server.URL,
+		map[string]any{
+			"deployment_id":   setupPrincipal.DeploymentID,
+			"organization_id": setupPrincipal.OrganizationID,
+			"user_ids":        []string{"user_other"},
+		},
+		cfg.ServiceToken,
+	)
+	rejectedMember.Body.Close()
+	if rejectedMember.StatusCode != http.StatusForbidden {
+		t.Fatalf("cross-organization member verify status = %d", rejectedMember.StatusCode)
 	}
 
 	revoked := doWebJSON(t, client, http.MethodPatch, server.URL+"/auth/v1/members/"+createdPayload.Data.UserID, server.URL, map[string]any{
@@ -243,10 +299,6 @@ func TestWebSetupLoginAndMemberAdministration(t *testing.T) {
 	defer assigned.Body.Close()
 	if assigned.StatusCode != http.StatusOK {
 		t.Fatalf("assign subscription status = %d", assigned.StatusCode)
-	}
-	setupPrincipal, err := service.ResolveSession(ctx, setupSessionToken)
-	if err != nil || setupPrincipal == nil {
-		t.Fatalf("resolve setup session: principal = %+v, err = %v", setupPrincipal, err)
 	}
 	verifiedRelayUser := doWebJSON(
 		t,

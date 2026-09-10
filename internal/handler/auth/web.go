@@ -248,6 +248,7 @@ func (s *HTTPServer) writeWebStatus(w http.ResponseWriter, r *http.Request, prin
 		"setup_enabled": state.SetupEnabled,
 		"username":      nil, "user_id": nil, "display_name": nil,
 		"role": nil, "avatar": nil, "auth_method": nil,
+		"organization_id": nil, "organization_name": nil,
 	}
 	if principal != nil {
 		payload["username"] = principal.Username
@@ -256,6 +257,8 @@ func (s *HTTPServer) writeWebStatus(w http.ResponseWriter, r *http.Request, prin
 		payload["role"] = principal.Role
 		payload["avatar"] = principal.Avatar
 		payload["auth_method"] = principal.AuthMethod
+		payload["organization_id"] = principal.OrganizationID
+		payload["organization_name"] = principal.OrganizationName
 	}
 	s.writeData(w, r, payload)
 }
@@ -323,14 +326,21 @@ func webOriginMatches(r *http.Request) bool {
 	if err != nil || origin.Scheme == "" || origin.Host == "" || origin.User != nil {
 		return false
 	}
+	return strings.EqualFold(origin.Scheme+"://"+origin.Host, webRequestOrigin(r))
+}
+
+func webRequestOrigin(r *http.Request) string {
 	scheme := "http"
 	if r.TLS != nil {
 		scheme = "https"
 	}
 	if forwarded := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Proto"), ",")[0]); forwarded != "" {
-		scheme = strings.ToLower(forwarded)
+		forwarded = strings.ToLower(forwarded)
+		if forwarded == "http" || forwarded == "https" {
+			scheme = forwarded
+		}
 	}
-	return strings.EqualFold(origin.Scheme, scheme) && strings.EqualFold(origin.Host, r.Host)
+	return scheme + "://" + r.Host
 }
 
 func webClientIP(r *http.Request) string {

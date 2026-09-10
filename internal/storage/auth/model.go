@@ -6,12 +6,13 @@ import (
 )
 
 var (
-	ErrAlreadySetup     = errors.New("Control owner 已初始化")
-	ErrUsernameConflict = errors.New("用户名已存在")
-	ErrNotFound         = errors.New("记录不存在")
-	ErrPlanNotFound     = errors.New("套餐不存在或已归档")
-	ErrLastOwner        = errors.New("部署必须保留至少一个 active owner")
-	ErrStateConflict    = errors.New("记录已被其他请求修改")
+	ErrAlreadySetup      = errors.New("Control owner 已初始化")
+	ErrUsernameConflict  = errors.New("用户名已存在")
+	ErrNotFound          = errors.New("记录不存在")
+	ErrPlanNotFound      = errors.New("套餐不存在或已归档")
+	ErrLastOwner         = errors.New("部署必须保留至少一个 active owner")
+	ErrStateConflict     = errors.New("记录已被其他请求修改")
+	ErrInvitationInvalid = errors.New("组织邀请无效或已失效")
 )
 
 type UserRecord struct {
@@ -26,14 +27,16 @@ type UserRecord struct {
 }
 
 type PrincipalRecord struct {
-	DeploymentID string
-	UserID       string
-	Username     string
-	DisplayName  string
-	Role         string
-	Avatar       string
-	AuthMethod   string
-	SessionID    string
+	DeploymentID     string
+	OrganizationID   string
+	OrganizationName string
+	UserID           string
+	Username         string
+	DisplayName      string
+	Role             string
+	Avatar           string
+	AuthMethod       string
+	SessionID        string
 }
 
 type SubscriptionPlanRecord struct {
@@ -103,27 +106,57 @@ type RevokedSessionRecord struct {
 }
 
 type OwnerRecord struct {
+	DeploymentID     string
+	DeploymentName   string
+	OrganizationID   string
+	OrganizationName string
+	UserID           string
+	IdentityID       string
+	CredentialID     string
+	Username         string
+	DisplayName      string
+	PasswordHash     string
+	CreatedAt        time.Time
+}
+
+type NewMemberRecord struct {
 	DeploymentID   string
-	DeploymentName string
+	OrganizationID string
 	UserID         string
 	IdentityID     string
 	CredentialID   string
 	Username       string
 	DisplayName    string
 	PasswordHash   string
+	Role           string
 	CreatedAt      time.Time
 }
 
-type NewMemberRecord struct {
-	DeploymentID string
+type OrganizationInvitationRecord struct {
+	InvitationID     string
+	DeploymentID     string
+	OrganizationID   string
+	OrganizationName string
+	TokenHash        string
+	Role             string
+	CreatedByUserID  string
+	AcceptedByUserID string
+	ExpiresAt        time.Time
+	AcceptedAt       *time.Time
+	RevokedAt        *time.Time
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
+type AcceptOrganizationInvitationRecord struct {
+	TokenHash    string
 	UserID       string
 	IdentityID   string
 	CredentialID string
 	Username     string
 	DisplayName  string
 	PasswordHash string
-	Role         string
-	CreatedAt    time.Time
+	AcceptedAt   time.Time
 }
 
 type SessionRecord struct {
@@ -161,11 +194,14 @@ type ImportedUserRecord struct {
 }
 
 type ImportedDeploymentRecord struct {
-	DeploymentID string
-	Name         string
-	Status       string
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	DeploymentID       string
+	Name               string
+	Status             string
+	OrganizationID     string
+	OrganizationName   string
+	OrganizationStatus string
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
 }
 
 type ImportedEntitlementRecord struct {

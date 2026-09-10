@@ -28,6 +28,7 @@ var (
 	ErrPlanNotFound       = errors.New("订阅套餐不存在或已归档")
 	ErrRequestInvalid     = errors.New("请求参数无效")
 	ErrRequestNotApplied  = errors.New("password change not applied")
+	ErrInvitationInvalid  = errors.New("组织邀请无效或已失效")
 )
 
 // User 是 Control 中唯一的真人账号主体。
@@ -129,35 +130,77 @@ type UpdateMemberInput struct {
 	Status          *string `json:"status"`
 }
 
+type CreateOrganizationInvitationInput struct {
+	Role           string `json:"role"`
+	ExpiresInHours int    `json:"expires_in_hours,omitempty"`
+}
+
+type AcceptOrganizationInvitationInput struct {
+	Token       string `json:"token"`
+	Username    string `json:"username"`
+	DisplayName string `json:"display_name"`
+	Password    string `json:"password"`
+}
+
+type OrganizationInvitation struct {
+	InvitationID     string     `json:"invitation_id"`
+	OrganizationID   string     `json:"organization_id"`
+	OrganizationName string     `json:"organization_name"`
+	Role             string     `json:"role"`
+	CreatedByUserID  string     `json:"created_by_user_id"`
+	AcceptedByUserID string     `json:"accepted_by_user_id,omitempty"`
+	ExpiresAt        time.Time  `json:"expires_at"`
+	AcceptedAt       *time.Time `json:"accepted_at,omitempty"`
+	RevokedAt        *time.Time `json:"revoked_at,omitempty"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
+}
+
+type CreatedOrganizationInvitation struct {
+	OrganizationInvitation
+	Token   string `json:"token"`
+	JoinURL string `json:"join_url,omitempty"`
+}
+
+type OrganizationInvitationPreview struct {
+	OrganizationName string    `json:"organization_name"`
+	Role             string    `json:"role"`
+	ExpiresAt        time.Time `json:"expires_at"`
+}
+
 // Principal 是 Control 签发给下游服务的短期身份事实。
 type Principal struct {
-	DeploymentID string      `json:"deployment_id"`
-	UserID       string      `json:"user_id"`
-	Username     string      `json:"username"`
-	DisplayName  string      `json:"display_name,omitempty"`
-	Role         string      `json:"role"`
-	Avatar       string      `json:"avatar,omitempty"`
-	AuthMethod   string      `json:"auth_method"`
-	SessionID    string      `json:"session_id"`
-	Entitlement  Entitlement `json:"entitlement"`
+	DeploymentID     string      `json:"deployment_id"`
+	OrganizationID   string      `json:"organization_id"`
+	OrganizationName string      `json:"organization_name"`
+	UserID           string      `json:"user_id"`
+	Username         string      `json:"username"`
+	DisplayName      string      `json:"display_name,omitempty"`
+	Role             string      `json:"role"`
+	Avatar           string      `json:"avatar,omitempty"`
+	AuthMethod       string      `json:"auth_method"`
+	SessionID        string      `json:"session_id"`
+	Entitlement      Entitlement `json:"entitlement"`
 }
 
 // PrincipalClaims 是签名 token 的稳定 v1 claim。
 type PrincipalClaims struct {
-	Version      int         `json:"v"`
-	Issuer       string      `json:"iss"`
-	Audience     string      `json:"aud"`
-	IssuedAt     int64       `json:"iat"`
-	ExpiresAt    int64       `json:"exp"`
-	DeploymentID string      `json:"deployment_id"`
-	UserID       string      `json:"user_id"`
-	Username     string      `json:"username"`
-	DisplayName  string      `json:"display_name,omitempty"`
-	Role         string      `json:"role"`
-	Avatar       string      `json:"avatar,omitempty"`
-	AuthMethod   string      `json:"auth_method"`
-	SessionID    string      `json:"session_id"`
-	Entitlement  Entitlement `json:"entitlement"`
+	Version          int         `json:"v"`
+	Issuer           string      `json:"iss"`
+	Audience         string      `json:"aud"`
+	IssuedAt         int64       `json:"iat"`
+	ExpiresAt        int64       `json:"exp"`
+	DeploymentID     string      `json:"deployment_id"`
+	OrganizationID   string      `json:"organization_id"`
+	OrganizationName string      `json:"organization_name"`
+	UserID           string      `json:"user_id"`
+	Username         string      `json:"username"`
+	DisplayName      string      `json:"display_name,omitempty"`
+	Role             string      `json:"role"`
+	Avatar           string      `json:"avatar,omitempty"`
+	AuthMethod       string      `json:"auth_method"`
+	SessionID        string      `json:"session_id"`
+	Entitlement      Entitlement `json:"entitlement"`
 }
 
 // State 描述 Control 是否完成首次设置。
@@ -185,10 +228,11 @@ type IdentityInvalidation struct {
 }
 
 type SetupOwnerInput struct {
-	Username       string `json:"username"`
-	DisplayName    string `json:"display_name"`
-	Password       string `json:"password"`
-	DeploymentName string `json:"deployment_name"`
+	Username         string `json:"username"`
+	DisplayName      string `json:"display_name"`
+	Password         string `json:"password"`
+	DeploymentName   string `json:"deployment_name"`
+	OrganizationName string `json:"organization_name"`
 }
 
 type LoginInput struct {

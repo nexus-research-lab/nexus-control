@@ -160,7 +160,7 @@ paths:
           $ref: "#/components/responses/Error"
   /auth/v1/members:
     get:
-      operationId: listDeploymentMembers
+      operationId: listOrganizationMembers
       security:
         - CookieSession: []
       responses:
@@ -171,7 +171,7 @@ paths:
         "403":
           $ref: "#/components/responses/Error"
     post:
-      operationId: createDeploymentMember
+      operationId: createOrganizationMemberDirectly
       security:
         - CookieSession: []
       requestBody:
@@ -194,7 +194,7 @@ paths:
   /auth/v1/directory/members:
     get:
       operationId: listMemberDirectory
-      description: 返回当前登录用户所在 Deployment 的 active 真人目录，不包含角色、状态或登录时间。
+      description: 返回当前登录用户所在 Organization 的 active 真人目录，不包含角色、状态或登录时间。
       security:
         - CookieSession: []
       responses:
@@ -204,7 +204,7 @@ paths:
           $ref: "#/components/responses/Error"
   /auth/v1/members/{user_id}:
     patch:
-      operationId: updateDeploymentMember
+      operationId: updateOrganizationMember
       security:
         - CookieSession: []
       parameters:
@@ -228,6 +228,64 @@ paths:
           $ref: "#/components/responses/Error"
         "409":
           $ref: "#/components/responses/Error"
+  /auth/v1/organization/invitations:
+    get:
+      operationId: listOrganizationInvitations
+      security:
+        - CookieSession: []
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "403": {$ref: "#/components/responses/Error"}
+    post:
+      operationId: createOrganizationInvitation
+      security:
+        - CookieSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/CreateOrganizationInvitationInput"}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "400": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+  /auth/v1/organization/invitations/{invitation_id}:
+    delete:
+      operationId: revokeOrganizationInvitation
+      security:
+        - CookieSession: []
+      parameters:
+        - name: invitation_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /auth/v1/organization-invitations/{token}:
+    get:
+      operationId: previewOrganizationInvitation
+      parameters:
+        - {$ref: "#/components/parameters/InvitationToken"}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "404": {$ref: "#/components/responses/Error"}
+  /auth/v1/organization-invitations/{token}/accept:
+    post:
+      operationId: acceptOrganizationInvitation
+      parameters:
+        - {$ref: "#/components/parameters/InvitationToken"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/AcceptOrganizationInvitationInput"}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "400": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
   /auth/v1/subscription/overview:
     get:
       operationId: subscriptionOverview
@@ -459,6 +517,33 @@ paths:
           $ref: "#/components/responses/Success"
         "401":
           $ref: "#/components/responses/Error"
+  /api/control/v1/internal/organizations/members/verify:
+    post:
+      operationId: verifyOrganizationMembers
+      description: 供受信 Nexus Gateway 在建群前确认所有真人目标都属于指定 Deployment 下的同一 active Organization。
+      x-internal: true
+      security:
+        - ServiceToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [deployment_id, organization_id, user_ids]
+              properties:
+                deployment_id: {type: string}
+                organization_id: {type: string}
+                user_ids:
+                  type: array
+                  maxItems: 100
+                  items: {type: string}
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
   /api/control/v1/internal/users/{user_id}/role:
     get:
       operationId: internalUserRole
@@ -512,6 +597,14 @@ components:
       in: cookie
       name: nexus_session
   parameters:
+    InvitationToken:
+      name: token
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 64
+        maxLength: 64
     UserID:
       name: user_id
       in: path
@@ -547,6 +640,9 @@ components:
           type: string
           minLength: 8
         deployment_name:
+          type: string
+          maxLength: 128
+        organization_name:
           type: string
           maxLength: 128
     WebLoginInput:
@@ -599,6 +695,27 @@ components:
           type: string
           enum: [owner, admin, member]
           default: member
+    CreateOrganizationInvitationInput:
+      type: object
+      additionalProperties: false
+      required: [role]
+      properties:
+        role:
+          type: string
+          enum: [admin, member]
+        expires_in_hours:
+          type: integer
+          minimum: 1
+          maximum: 720
+          default: 168
+    AcceptOrganizationInvitationInput:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        username: {type: string, minLength: 3, maxLength: 64}
+        display_name: {type: string, maxLength: 128}
+        password: {type: string, minLength: 8, maxLength: 1024}
     UpdateMemberInput:
       type: object
       additionalProperties: false

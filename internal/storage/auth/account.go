@@ -36,10 +36,12 @@ func (r *Repository) CreateOwner(ctx context.Context, record OwnerRecord) error 
 		args  []any
 	}{
 		{`INSERT INTO deployments (deployment_id, name, status, created_at, updated_at) VALUES (` + r.dialect.BindList(5) + `)`, []any{record.DeploymentID, record.DeploymentName, "active", now, now}},
+		{`INSERT INTO organizations (organization_id, deployment_id, name, status, created_at, updated_at) VALUES (` + r.dialect.BindList(6) + `)`, []any{record.OrganizationID, record.DeploymentID, record.OrganizationName, "active", now, now}},
 		{`INSERT INTO users (user_id, username, display_name, status, created_at, updated_at) VALUES (` + r.dialect.BindList(6) + `)`, []any{record.UserID, record.Username, record.DisplayName, "active", now, now}},
 		{`INSERT INTO identities (identity_id, user_id, provider, subject, created_at, updated_at) VALUES (` + r.dialect.BindList(6) + `)`, []any{record.IdentityID, record.UserID, "password", record.Username, now, now}},
 		{`INSERT INTO password_credentials (credential_id, user_id, password_hash, password_algo, password_updated_at, created_at, updated_at) VALUES (` + r.dialect.BindList(7) + `)`, []any{record.CredentialID, record.UserID, record.PasswordHash, "argon2id", now, now, now}},
 		{`INSERT INTO deployment_memberships (deployment_id, user_id, role, status, created_at, updated_at) VALUES (` + r.dialect.BindList(6) + `)`, []any{record.DeploymentID, record.UserID, "owner", "active", now, now}},
+		{`INSERT INTO organization_memberships (organization_id, user_id, role, status, created_at, updated_at) VALUES (` + r.dialect.BindList(6) + `)`, []any{record.OrganizationID, record.UserID, "owner", "active", now, now}},
 	}
 	for _, statement := range statements {
 		if _, err = tx.ExecContext(ctx, statement.query, statement.args...); err != nil {
@@ -117,11 +119,9 @@ func (r *Repository) ImportDeployment(
 	now time.Time,
 ) error {
 	return r.importDeployment(ctx, ImportedDeploymentRecord{
-		DeploymentID: deploymentID,
-		Name:         deploymentName,
-		Status:       "active",
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		DeploymentID: deploymentID, Name: deploymentName, Status: "active",
+		OrganizationID: deploymentID, OrganizationName: deploymentName,
+		OrganizationStatus: "active", CreatedAt: now, UpdatedAt: now,
 	}, items, plans, entitlements, true)
 }
 
@@ -180,6 +180,14 @@ SELECT
 	); err != nil {
 		return err
 	}
+	if _, err = tx.ExecContext(ctx,
+		`INSERT INTO organizations (organization_id, deployment_id, name, status, created_at, updated_at) VALUES (`+r.dialect.BindList(6)+`)`,
+		deployment.OrganizationID, deployment.DeploymentID,
+		deployment.OrganizationName, deployment.OrganizationStatus,
+		deployment.CreatedAt, deployment.UpdatedAt,
+	); err != nil {
+		return err
+	}
 	if insertDefaults {
 		if err = r.insertDefaultSubscriptionPlans(ctx, tx, deployment.DeploymentID, deployment.CreatedAt); err != nil {
 			return err
@@ -192,7 +200,7 @@ SELECT
 		}
 	}
 	for _, item := range items {
-		if err = r.importUser(ctx, tx, deployment.DeploymentID, item); err != nil {
+		if err = r.importUser(ctx, tx, deployment.DeploymentID, deployment.OrganizationID, item); err != nil {
 			return err
 		}
 	}
@@ -309,7 +317,7 @@ ORDER BY user_id ASC`, deploymentID)
 	return users, rows.Err()
 }
 
-func (r *Repository) importUser(ctx context.Context, tx *sql.Tx, deploymentID string, item ImportedUserRecord) error {
+func (r *Repository) importUser(ctx context.Context, tx *sql.Tx, deploymentID, organizationID string, item ImportedUserRecord) error {
 	user := item.User
 	identityCreated := item.IdentityCreated
 	if identityCreated.IsZero() {
@@ -346,9 +354,15 @@ func (r *Repository) importUser(ctx context.Context, tx *sql.Tx, deploymentID st
 	if membershipUpdated.IsZero() {
 		membershipUpdated = user.UpdatedAt
 	}
-	_, err := tx.ExecContext(ctx,
+	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO deployment_memberships (deployment_id, user_id, role, status, created_at, updated_at) VALUES (`+r.dialect.BindList(6)+`)`,
 		deploymentID, user.UserID, item.Role, membershipStatus, membershipCreated, membershipUpdated,
+	); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx,
+		`INSERT INTO organization_memberships (organization_id, user_id, role, status, created_at, updated_at) VALUES (`+r.dialect.BindList(6)+`)`,
+		organizationID, user.UserID, item.Role, membershipStatus, membershipCreated, membershipUpdated,
 	)
 	return err
 }
