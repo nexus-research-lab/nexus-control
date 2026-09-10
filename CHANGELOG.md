@@ -2,14 +2,13 @@
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-10
+
 ### 新增
 
-- 增加所有已登录用户可读取的最小 Deployment 成员目录，用于在线 Room 邀请且不暴露成员管理字段。
-
-- 支持 Nexus 管理员对话中的成员管理，实时复核绑定 Session；支持显示名称修改、版本冲突校验与撤销部署访问。
-
-- Principal exchange 与人类 Session 核验默认支持独立的 `nexus-relay-user` audience，不与 Runtime 或 Node 凭据混用。
-- 新增一次性 `import-control-sqlite` 命令，可将现有 Control SQLite 的身份与 entitlement 原样迁移到空 PostgreSQL，并明确让旧 Session 失效。
+- 提供在线 Room 邀请所需的最小成员目录，以及绑定管理员 Session 的对话式成员管理、显示名称修改、版本校验和部署访问撤销。
+- 支持独立的 Relay 用户 Principal audience，隔离运行时与在线协作身份。
+- 提供 Control SQLite 到空 PostgreSQL 的一次性迁移，保留账号和订阅权益并让旧 Session 失效。
 
 ## [0.1.0] - 2026-09-04
 
