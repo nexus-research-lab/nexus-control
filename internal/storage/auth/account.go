@@ -89,7 +89,7 @@ FROM users WHERE user_id = `+r.bind(1), strings.TrimSpace(userID)).Scan(
 }
 
 func (r *Repository) UpdateAvatar(ctx context.Context, userID, avatar string, now time.Time) error {
-	tx, err := r.db.BeginTx(ctx, nil)
+	tx, err := r.beginIdentityWrite(ctx)
 	if err != nil {
 		return err
 	}
@@ -122,7 +122,7 @@ func (r *Repository) ImportDeployment(
 		DeploymentID: deploymentID, Name: deploymentName, Status: "active",
 		OrganizationID: deploymentID, OrganizationName: deploymentName,
 		OrganizationStatus: "active", CreatedAt: now, UpdatedAt: now,
-	}, items, plans, entitlements, true)
+	}, items, nil, plans, entitlements, true)
 }
 
 // ImportControlDeployment 把旧 Control 的完整账号权威复制到空目标库。
@@ -130,16 +130,18 @@ func (r *Repository) ImportControlDeployment(
 	ctx context.Context,
 	deployment ImportedDeploymentRecord,
 	items []ImportedUserRecord,
+	agents []AgentRecord,
 	plans []SubscriptionPlanRecord,
 	entitlements []ImportedEntitlementRecord,
 ) error {
-	return r.importDeployment(ctx, deployment, items, plans, entitlements, false)
+	return r.importDeployment(ctx, deployment, items, agents, plans, entitlements, false)
 }
 
 func (r *Repository) importDeployment(
 	ctx context.Context,
 	deployment ImportedDeploymentRecord,
 	items []ImportedUserRecord,
+	agents []AgentRecord,
 	plans []SubscriptionPlanRecord,
 	entitlements []ImportedEntitlementRecord,
 	insertDefaults bool,
@@ -163,6 +165,7 @@ SELECT
     (SELECT COUNT(*) FROM sessions) +
     (SELECT COUNT(*) FROM password_change_receipts) +
     (SELECT COUNT(*) FROM identity_invalidations) +
+	(SELECT COUNT(*) FROM agents) +
     (SELECT COUNT(*) FROM subscription_plans) +
     (SELECT COUNT(*) FROM member_entitlements)`).Scan(&count); err != nil {
 		return err
@@ -201,6 +204,31 @@ SELECT
 	}
 	for _, item := range items {
 		if err = r.importUser(ctx, tx, deployment.DeploymentID, deployment.OrganizationID, item); err != nil {
+			return err
+		}
+	}
+	for _, agent := range agents {
+		if _, err = tx.ExecContext(ctx, `
+INSERT INTO agents
+    (agent_id, deployment_id, organization_id, owner_user_id, source_agent_id,
+     name, avatar, status, created_at, updated_at)
+VALUES (`+r.dialect.BindList(10)+`)`,
+			agent.AgentID, deployment.DeploymentID, deployment.OrganizationID,
+			agent.OwnerUserID, agent.SourceAgentID, agent.Name, nullableString(agent.Avatar),
+			agent.Status, agent.CreatedAt, agent.UpdatedAt,
+		); err != nil {
+			return err
+		}
+	}
+	for _, event := range deployment.Invalidations {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO identity_invalidations
+			(event_id, deployment_id, user_id, session_id, reason, created_at, organization_id, membership_revoked)
+			VALUES (`+r.dialect.BindList(8)+`)`, event.EventID, event.DeploymentID, event.UserID, nullableString(event.SessionID), event.Reason, event.CreatedAt, event.OrganizationID, event.MembershipRevoked); err != nil {
+			return err
+		}
+	}
+	if len(deployment.Invalidations) > 0 && r.dialect.IsPostgres() {
+		if _, err = tx.ExecContext(ctx, `SELECT setval(pg_get_serial_sequence('identity_invalidations', 'event_id'), (SELECT MAX(event_id) FROM identity_invalidations), TRUE)`); err != nil {
 			return err
 		}
 	}

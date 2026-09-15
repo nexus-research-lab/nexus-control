@@ -15,6 +15,7 @@ const (
 	MembershipActive  = "active"
 	MembershipRevoked = "revoked"
 	AuthPassword      = "password"
+	AgentStatusActive = "active"
 )
 
 var (
@@ -63,6 +64,32 @@ type MemberDirectoryEntry struct {
 	Username    string `json:"username"`
 	DisplayName string `json:"display_name"`
 	Avatar      string `json:"avatar,omitempty"`
+}
+
+// Agent 是真人发布到 Control 的在线协作身份，不包含本地运行配置。
+type Agent struct {
+	AgentID       string    `json:"agent_id"`
+	OwnerUserID   string    `json:"owner_user_id"`
+	SourceAgentID string    `json:"source_agent_id"`
+	Name          string    `json:"name"`
+	Avatar        string    `json:"avatar,omitempty"`
+	Status        string    `json:"status"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+// AgentDirectoryEntry 是组织成员可见的 Agent 公开身份。
+type AgentDirectoryEntry struct {
+	AgentID     string `json:"agent_id"`
+	OwnerUserID string `json:"owner_user_id"`
+	Name        string `json:"name"`
+	Avatar      string `json:"avatar,omitempty"`
+}
+
+type PublishAgentInput struct {
+	SourceAgentID string `json:"source_agent_id"`
+	Name          string `json:"name"`
+	Avatar        string `json:"avatar,omitempty"`
 }
 
 // Entitlement 是 Control 签发并投影给 Nexus 的有效服务额度。
@@ -170,6 +197,9 @@ type OrganizationInvitationPreview struct {
 
 // Principal 是 Control 签发给下游服务的短期身份事实。
 type Principal struct {
+	NodeID           string      `json:"node_id,omitempty"`
+	ParentSessionID  string      `json:"parent_session_id,omitempty"`
+	AgentIDs         []string    `json:"agent_ids,omitempty"`
 	DeploymentID     string      `json:"deployment_id"`
 	OrganizationID   string      `json:"organization_id"`
 	OrganizationName string      `json:"organization_name"`
@@ -185,6 +215,9 @@ type Principal struct {
 
 // PrincipalClaims 是签名 token 的稳定 v1 claim。
 type PrincipalClaims struct {
+	NodeID           string      `json:"node_id,omitempty"`
+	ParentSessionID  string      `json:"parent_session_id,omitempty"`
+	AgentIDs         []string    `json:"agent_ids,omitempty"`
 	Version          int         `json:"v"`
 	Issuer           string      `json:"iss"`
 	Audience         string      `json:"aud"`
@@ -219,12 +252,14 @@ type LoginResult struct {
 
 // IdentityInvalidation 通知 Nexus 丢弃指定 Control 身份的本地租约。
 type IdentityInvalidation struct {
-	EventID      int64     `json:"event_id"`
-	DeploymentID string    `json:"deployment_id"`
-	UserID       string    `json:"user_id"`
-	SessionID    string    `json:"session_id,omitempty"`
-	Reason       string    `json:"reason"`
-	CreatedAt    time.Time `json:"created_at"`
+	OrganizationID    string    `json:"organization_id,omitempty"`
+	MembershipRevoked bool      `json:"membership_revoked,omitempty"`
+	EventID           int64     `json:"event_id"`
+	DeploymentID      string    `json:"deployment_id"`
+	UserID            string    `json:"user_id"`
+	SessionID         string    `json:"session_id,omitempty"`
+	Reason            string    `json:"reason"`
+	CreatedAt         time.Time `json:"created_at"`
 }
 
 type SetupOwnerInput struct {

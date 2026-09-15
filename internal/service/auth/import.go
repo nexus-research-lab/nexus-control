@@ -15,7 +15,7 @@ import (
 )
 
 // controlSQLiteImportSchemaVersion 随 Control 权威 schema 更新，防止旧迁移器静默丢字段。
-const controlSQLiteImportSchemaVersion = 6
+const controlSQLiteImportSchemaVersion = 9
 
 // ImportNexusSQLite 从停止写入的 Nexus SQLite 复制账号和密码哈希。
 // Session 故意不导入，切换后所有浏览器必须重新登录。
@@ -114,7 +114,7 @@ func (s *Service) ImportNexusSubscriptionsSQLite(ctx context.Context, sourcePath
 }
 
 // ImportControlSQLite 从旧 Control SQLite 向空目标库复制账号权威。
-// Session、密码修改回执和失效事件属于旧进程状态，不跨数据库迁移。
+// Session 与密码修改回执不导入；身份失效序列保留原 ID，供 Relay 持久游标继续消费。
 func (s *Service) ImportControlSQLite(ctx context.Context, sourcePath string) error {
 	source, err := openReadOnlySQLite(sourcePath)
 	if err != nil {
@@ -126,14 +126,31 @@ func (s *Service) ImportControlSQLite(ctx context.Context, sourcePath string) er
 		return fmt.Errorf("打开 Control SQLite 只读事务: %w", err)
 	}
 	defer tx.Rollback()
-	deployment, items, plans, entitlements, err := scanControlSnapshot(ctx, tx)
+	deployment, items, agents, plans, entitlements, err := scanControlSnapshot(ctx, tx)
+	if err != nil {
+		return err
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT event_id, deployment_id, user_id, COALESCE(session_id, ''), reason, created_at, organization_id, membership_revoked FROM identity_invalidations ORDER BY event_id`)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var event store.IdentityInvalidationRecord
+		if err = rows.Scan(&event.EventID, &event.DeploymentID, &event.UserID, &event.SessionID, &event.Reason, &event.CreatedAt, &event.OrganizationID, &event.MembershipRevoked); err != nil {
+			rows.Close()
+			return err
+		}
+		deployment.Invalidations = append(deployment.Invalidations, event)
+	}
+	err = rows.Err()
+	rows.Close()
 	if err != nil {
 		return err
 	}
 	if err = tx.Commit(); err != nil {
 		return fmt.Errorf("完成 Control SQLite 只读快照: %w", err)
 	}
-	if err = s.repository.ImportControlDeployment(ctx, deployment, items, plans, entitlements); errors.Is(err, store.ErrAlreadySetup) {
+	if err = s.repository.ImportControlDeployment(ctx, deployment, items, agents, plans, entitlements); errors.Is(err, store.ErrAlreadySetup) {
 		return ErrAlreadySetup
 	}
 	return err
@@ -145,6 +162,7 @@ func scanControlSnapshot(
 ) (
 	store.ImportedDeploymentRecord,
 	[]store.ImportedUserRecord,
+	[]store.AgentRecord,
 	[]store.SubscriptionPlanRecord,
 	[]store.ImportedEntitlementRecord,
 	error,
@@ -154,10 +172,10 @@ func scanControlSnapshot(
 SELECT COALESCE(MAX(version_id), 0)
 FROM goose_db_version
 WHERE is_applied = 1`).Scan(&schemaVersion); err != nil {
-		return store.ImportedDeploymentRecord{}, nil, nil, nil, fmt.Errorf("读取源 Control schema 版本: %w", err)
+		return store.ImportedDeploymentRecord{}, nil, nil, nil, nil, fmt.Errorf("读取源 Control schema 版本: %w", err)
 	}
 	if schemaVersion != controlSQLiteImportSchemaVersion {
-		return store.ImportedDeploymentRecord{}, nil, nil, nil, fmt.Errorf(
+		return store.ImportedDeploymentRecord{}, nil, nil, nil, nil, fmt.Errorf(
 			"源 Control schema 版本必须为 %d，实际为 %d",
 			controlSQLiteImportSchemaVersion,
 			schemaVersion,
@@ -165,10 +183,10 @@ WHERE is_applied = 1`).Scan(&schemaVersion); err != nil {
 	}
 	var deploymentCount int
 	if err := source.QueryRowContext(ctx, `SELECT COUNT(*) FROM deployments`).Scan(&deploymentCount); err != nil {
-		return store.ImportedDeploymentRecord{}, nil, nil, nil, fmt.Errorf("读取源 Control Deployment: %w", err)
+		return store.ImportedDeploymentRecord{}, nil, nil, nil, nil, fmt.Errorf("读取源 Control Deployment: %w", err)
 	}
 	if deploymentCount != 1 {
-		return store.ImportedDeploymentRecord{}, nil, nil, nil, fmt.Errorf("源 Control 必须且只能包含一个 Deployment，实际为 %d", deploymentCount)
+		return store.ImportedDeploymentRecord{}, nil, nil, nil, nil, fmt.Errorf("源 Control 必须且只能包含一个 Deployment，实际为 %d", deploymentCount)
 	}
 	var deployment store.ImportedDeploymentRecord
 	if err := source.QueryRowContext(ctx, `
@@ -180,16 +198,16 @@ FROM deployments`).Scan(
 		&deployment.CreatedAt,
 		&deployment.UpdatedAt,
 	); err != nil {
-		return store.ImportedDeploymentRecord{}, nil, nil, nil, fmt.Errorf("读取源 Control Deployment: %w", err)
+		return store.ImportedDeploymentRecord{}, nil, nil, nil, nil, fmt.Errorf("读取源 Control Deployment: %w", err)
 	}
 	deployment.CreatedAt = deployment.CreatedAt.UTC()
 	deployment.UpdatedAt = deployment.UpdatedAt.UTC()
 	var organizationCount int
 	if err := source.QueryRowContext(ctx, `SELECT COUNT(*) FROM organizations WHERE deployment_id = ?`, deployment.DeploymentID).Scan(&organizationCount); err != nil {
-		return store.ImportedDeploymentRecord{}, nil, nil, nil, fmt.Errorf("读取源 Control Organization: %w", err)
+		return store.ImportedDeploymentRecord{}, nil, nil, nil, nil, fmt.Errorf("读取源 Control Organization: %w", err)
 	}
 	if organizationCount != 1 {
-		return store.ImportedDeploymentRecord{}, nil, nil, nil, fmt.Errorf("源 Control 当前必须且只能包含一个 Organization，实际为 %d", organizationCount)
+		return store.ImportedDeploymentRecord{}, nil, nil, nil, nil, fmt.Errorf("源 Control 当前必须且只能包含一个 Organization，实际为 %d", organizationCount)
 	}
 	if err := source.QueryRowContext(ctx, `
 SELECT organization_id, name, status FROM organizations WHERE deployment_id = ?`, deployment.DeploymentID).Scan(
@@ -197,24 +215,50 @@ SELECT organization_id, name, status FROM organizations WHERE deployment_id = ?`
 		&deployment.OrganizationName,
 		&deployment.OrganizationStatus,
 	); err != nil {
-		return store.ImportedDeploymentRecord{}, nil, nil, nil, fmt.Errorf("读取源 Control Organization: %w", err)
+		return store.ImportedDeploymentRecord{}, nil, nil, nil, nil, fmt.Errorf("读取源 Control Organization: %w", err)
 	}
 	if err := validateImportedControlDeployment(deployment); err != nil {
-		return store.ImportedDeploymentRecord{}, nil, nil, nil, err
+		return store.ImportedDeploymentRecord{}, nil, nil, nil, nil, err
 	}
 	items, err := scanControlUsers(ctx, source, deployment.DeploymentID, deployment.OrganizationID)
 	if err != nil {
-		return store.ImportedDeploymentRecord{}, nil, nil, nil, err
+		return store.ImportedDeploymentRecord{}, nil, nil, nil, nil, err
+	}
+	agents, err := scanControlAgents(ctx, source, deployment.DeploymentID, deployment.OrganizationID)
+	if err != nil {
+		return store.ImportedDeploymentRecord{}, nil, nil, nil, nil, err
 	}
 	plans, err := scanControlPlans(ctx, source, deployment.DeploymentID)
 	if err != nil {
-		return store.ImportedDeploymentRecord{}, nil, nil, nil, err
+		return store.ImportedDeploymentRecord{}, nil, nil, nil, nil, err
 	}
 	entitlements, err := scanControlEntitlements(ctx, source, deployment.DeploymentID)
 	if err != nil {
-		return store.ImportedDeploymentRecord{}, nil, nil, nil, err
+		return store.ImportedDeploymentRecord{}, nil, nil, nil, nil, err
 	}
-	return deployment, items, plans, entitlements, nil
+	return deployment, items, agents, plans, entitlements, nil
+}
+
+func scanControlAgents(ctx context.Context, source *sql.Tx, deploymentID, organizationID string) ([]store.AgentRecord, error) {
+	rows, err := source.QueryContext(ctx, `
+SELECT agent_id, deployment_id, organization_id, owner_user_id, source_agent_id,
+       name, avatar, status, created_at, updated_at
+FROM agents
+WHERE deployment_id = ? AND organization_id = ?
+ORDER BY agent_id`, deploymentID, organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("读取源 Control Agent: %w", err)
+	}
+	defer rows.Close()
+	agents := make([]store.AgentRecord, 0)
+	for rows.Next() {
+		agent, scanErr := store.ScanAgent(rows)
+		if scanErr != nil {
+			return nil, fmt.Errorf("读取源 Control Agent: %w", scanErr)
+		}
+		agents = append(agents, agent)
+	}
+	return agents, rows.Err()
 }
 
 func scanControlUsers(

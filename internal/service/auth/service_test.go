@@ -79,6 +79,25 @@ func runControlConformance(t *testing.T, cfg config.Config) {
 		t.Fatalf("过期邀请应可删除: %v", err)
 	}
 	service.now = clock
+	agent, err := service.PublishAgent(ctx, *owner, PublishAgentInput{SourceAgentID: "nexus", Name: "Nexus"})
+	if err != nil || agent.AgentID == "" || agent.OwnerUserID != owner.UserID {
+		t.Fatalf("published agent = %+v, err = %v", agent, err)
+	}
+	updatedAgent, err := service.PublishAgent(ctx, *owner, PublishAgentInput{SourceAgentID: "nexus", Name: "Nexus Updated"})
+	if err != nil || updatedAgent.AgentID != agent.AgentID || updatedAgent.Name != "Nexus Updated" {
+		t.Fatalf("updated agent = %+v, err = %v", updatedAgent, err)
+	}
+	verifiedAgents, err := service.VerifyOwnedAgents(ctx, owner.DeploymentID, owner.OrganizationID, owner.UserID, []string{agent.AgentID})
+	if err != nil || len(verifiedAgents) != 1 || verifiedAgents[0].AgentID != agent.AgentID {
+		t.Fatalf("verified agents = %+v, err = %v", verifiedAgents, err)
+	}
+	agentDirectory, err := service.ListOrganizationAgents(ctx, *owner)
+	if err != nil || len(agentDirectory) != 1 || agentDirectory[0].AgentID != agent.AgentID {
+		t.Fatalf("agent directory = %+v, err = %v", agentDirectory, err)
+	}
+	if _, err = service.VerifyOwnedAgents(ctx, owner.DeploymentID, owner.OrganizationID, "user_other", []string{agent.AgentID}); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("cross-owner agent verification err = %v", err)
+	}
 	if _, err = service.Login(ctx, LoginInput{Username: "admin", Password: "wrong-password"}); !errors.Is(err, ErrInvalidCredentials) {
 		t.Fatalf("wrong password err = %v", err)
 	}
@@ -192,6 +211,35 @@ func runControlConformance(t *testing.T, cfg config.Config) {
 	}
 	if resolved, resolveErr := service.ResolveSession(ctx, login.SessionToken); resolveErr != nil || resolved != nil {
 		t.Fatalf("resolved after logout = %+v, err = %v", resolved, resolveErr)
+	}
+	memberLogin, err := service.Login(ctx, LoginInput{Username: "member", Password: "password-456"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	memberAgent, err := service.PublishAgent(ctx, memberLogin.Principal, PublishAgentInput{SourceAgentID: "local-agent", Name: "Member Agent"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	revoked := MembershipRevoked
+	if _, err = service.UpdateMember(ctx, *owner, member.UserID, UpdateMemberInput{Status: &revoked}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = service.VerifyOwnedAgents(ctx, owner.DeploymentID, owner.OrganizationID, member.UserID, []string{memberAgent.AgentID}); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("revoked Agent verified: %v", err)
+	}
+	if directory, err := service.ListOrganizationAgents(ctx, *owner); err != nil || len(directory) != 1 {
+		t.Fatalf("revoked Agent in directory: %+v, %v", directory, err)
+	}
+	if _, err = service.PublishAgent(ctx, memberLogin.Principal, PublishAgentInput{SourceAgentID: "late", Name: "Late"}); err == nil {
+		t.Fatal("stale principal republished Agent")
+	}
+	allEvents, err := service.ListIdentityInvalidations(ctx, 0, 256)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lastEvent := allEvents[len(allEvents)-1]
+	if !lastEvent.MembershipRevoked || lastEvent.OrganizationID != owner.OrganizationID {
+		t.Fatalf("revocation missing organization: %+v", lastEvent)
 	}
 }
 

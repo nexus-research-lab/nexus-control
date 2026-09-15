@@ -6,6 +6,78 @@ info:
 servers:
   - url: /
 paths:
+  /auth/v1/nodes:
+    get:
+      operationId: listExecutionNodes
+      security: [{CookieSession: []}]
+      description: 当前组织与真人的最近 100 条 Node 授权，不返回凭据。
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "401": {$ref: "#/components/responses/Error"}
+    post:
+      operationId: registerExecutionNode
+      security: [{CookieSession: []}]
+      description: 必须同源 Origin；节点绑定当前浏览器 Session 和明确选择的本人 Agent。相同 ID、凭据、名称和范围幂等，不允许覆盖或复活已撤销授权。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [node_id, name, credential, agent_ids]
+              properties:
+                node_id: {type: string, minLength: 1, maxLength: 128}
+                name: {type: string, minLength: 1, maxLength: 128}
+                credential: {type: string, description: 宿主生成的 32 字节随机 base64url 字符串，Control 只保存哈希。}
+                agent_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 32
+                  items: {type: string, maxLength: 128}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /auth/v1/nodes/{node_id}:
+    get:
+      operationId: getExecutionNode
+      security: [{CookieSession: []}]
+      description: 当前部署、组织和所有者限定的精确 Node 授权回执，含撤销状态，不返回凭据；不受最近 100 条列表窗口影响。登记状态不表示执行器已连接或父 Session 仍有效。
+      parameters:
+        - name: node_id
+          in: path
+          required: true
+          schema: {type: string, maxLength: 128}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "401": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+    delete:
+      operationId: revokeExecutionNode
+      security: [{CookieSession: []}]
+      description: 同源、所有者限定、幂等撤销；已注册节点同事务追加 session_revoked，目标为 node:<node_id>。未注册 ID 留不可换取令牌的终止记录，阻断迟到注册；不以 404 代替取消回执。
+      parameters:
+        - name: node_id
+          in: path
+          required: true
+          schema: {type: string, maxLength: 128}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /auth/v1/nodes/token:
+    post:
+      operationId: exchangeExecutionNodeToken
+      security: [{NodeCredential: []}]
+      description: 不使用 Cookie。返回 data.token、expires_at 和已校验归属的 agents；令牌固定 nexus-relay-node audience、60 秒期限和签名 Agent 范围。父 Session 失效或 Agent 不再属于本人时拒绝。
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
   /api/control/v1/internal/members/manage:
     post:
       operationId: manageMembersForBoundHuman
@@ -200,6 +272,52 @@ paths:
       responses:
         "200":
           $ref: "#/components/responses/Success"
+        "401":
+          $ref: "#/components/responses/Error"
+  /auth/v1/agents:
+    get:
+      operationId: listOwnedAgents
+      description: 返回当前真人在当前 Organization 已发布的 active Agent 身份。
+      security:
+        - CookieSession: []
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "401":
+          $ref: "#/components/responses/Error"
+  /auth/v1/directory/agents:
+    get:
+      operationId: listOrganizationAgentDirectory
+      description: 返回当前 Organization 的 active Agent 公开身份，不暴露其他真人的本地 source_agent_id。
+      security:
+        - CookieSession: []
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "401":
+          $ref: "#/components/responses/Error"
+  /auth/v1/agents/{source_agent_id}:
+    put:
+      operationId: publishOwnedAgent
+      description: 以本地 source_agent_id 幂等创建或刷新当前真人拥有的在线 Agent 身份。
+      security:
+        - CookieSession: []
+      parameters:
+        - name: source_agent_id
+          in: path
+          required: true
+          schema: {type: string, maxLength: 128}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PublishAgentInput"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
         "401":
           $ref: "#/components/responses/Error"
   /auth/v1/members/{user_id}:
@@ -559,6 +677,35 @@ paths:
           $ref: "#/components/responses/Success"
         "403":
           $ref: "#/components/responses/Error"
+  /api/control/v1/internal/agents/verify:
+    post:
+      operationId: verifyOwnedAgents
+      description: 供受信 Nexus Gateway 验证一组 active Agent 均属于指定组织和真人，并返回可投影到 Relay 的公开身份。
+      x-internal: true
+      security:
+        - ServiceToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [deployment_id, organization_id, owner_user_id, agent_ids]
+              properties:
+                deployment_id: {type: string}
+                organization_id: {type: string}
+                owner_user_id: {type: string}
+                agent_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items: {type: string}
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
   /api/control/v1/internal/users/{user_id}/role:
     get:
       operationId: internalUserRole
@@ -601,6 +748,10 @@ paths:
           $ref: "#/components/responses/Error"
 components:
   securitySchemes:
+    NodeCredential:
+      type: http
+      scheme: bearer
+      description: 注册时由设备安全保存的独立随机凭据，不是浏览器 Session 或服务 token。
     ServiceToken:
       type: http
       scheme: bearer
@@ -642,6 +793,34 @@ components:
         minLength: 8
         maxLength: 128
   schemas:
+    PublishAgentInput:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        source_agent_id: {type: string, maxLength: 128}
+        name: {type: string, minLength: 1, maxLength: 128}
+        avatar: {type: string, maxLength: 2048}
+    Agent:
+      type: object
+      required: [agent_id, owner_user_id, source_agent_id, name, status, created_at, updated_at]
+      properties:
+        agent_id: {type: string}
+        owner_user_id: {type: string}
+        source_agent_id: {type: string}
+        name: {type: string}
+        avatar: {type: string}
+        status: {type: string, enum: [active, revoked]}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    AgentDirectoryEntry:
+      type: object
+      required: [agent_id, owner_user_id, name]
+      properties:
+        agent_id: {type: string}
+        owner_user_id: {type: string}
+        name: {type: string}
+        avatar: {type: string}
     SetupOwnerInput:
       type: object
       additionalProperties: false
@@ -929,6 +1108,12 @@ components:
       type: object
       required: [event_id, deployment_id, user_id, reason, created_at]
       properties:
+        organization_id:
+          type: string
+          description: 组织成员撤权的精确作用域。
+        membership_revoked:
+          type: boolean
+          description: 已提交的组织撤权事实；Relay 必须与消费游标同事务处理，不得仅看当前成员状态推断历史。
         event_id:
           type: integer
           format: int64
@@ -938,7 +1123,7 @@ components:
           type: string
         session_id:
           type: string
-          description: 仅 session_revoked 事件携带，用于精确撤销一个浏览器 Session。
+          description: 仅 session_revoked 事件携带；普通值撤销浏览器 Session 及其派生 Node，node:<node_id> 只撤销精确 Node。
         reason:
           type: string
           enum: [principal_changed, profile_changed, session_revoked, entitlement_changed]

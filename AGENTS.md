@@ -4,12 +4,17 @@
 
 ## 边界
 
-- 本仓唯一写入 User、密码凭据、浏览器 Session、Deployment、Organization、Membership、订阅套餐与成员 entitlement；Deployment 是安装边界，Organization 是多人协作租户边界。
+- 本仓唯一写入 User、密码凭据、浏览器 Session、Deployment、Organization、Membership、在线 Agent 身份与归属、订阅套餐及成员 entitlement；Deployment 是安装边界，Organization 是多人协作租户边界。
 - `nexus` 与 `nexus-relay` 只消费本仓签发的短期 Principal，不得读取 Control 数据库。
-- `nexus-control` 不依赖 `nexus-relay`，也不保存 Agent、workspace、transcript 或产物。
-- Runtime 与 Relay User 使用不同 Principal audience；两者携带当前 Organization，Relay 必须据此隔离 Room；Relay Node 必须在其身份模型落地后使用独立 audience。
+- `nexus-control` 不依赖 `nexus-relay`；Agent 只保存公开身份、归属和发布状态，不保存本地配置、workspace、transcript 或产物。
+- Runtime、Relay User 与 Relay Node 使用独立 Principal audience。Node 只由有效浏览器 Session 显式注册，绑定组织、真人所有者和最多 32 个自己发布的 Agent；Control 仅存凭据哈希，机器凭据只能换取 60 秒 Node 令牌，不能访问真人 API。
+- Node 精确回执查询按 Deployment、Organization、Owner 三重限定，不依赖最近 100 条设备列表；登记记录不代表父 Session 仍有效，执行资格仍由机器令牌交换重新校验。
+- 撤销未知 Node ID 也在身份写事务中保留终止记录（凭据哈希使用不可签发前缀），阻断迟到注册。已注册 Node 撤销才需要发布失效事件；不存在的 Node 不可能已有执行租约。
+- `execution_nodes` 与浏览器父 Session 绑定，撤销节点写 `session_revoked`（`session_id=node:<node_id>`）；父 Session 撤销也使派生节点失效。普通 Principal exchange 不接受 Node audience。SQLite→PostgreSQL 导入不迁移 Session 或 Node 授权，设备必须重新授权。
 - 浏览器登录、登出、资料、改密、初始化、Organization 邀请、成员目录、成员和订阅运营 API 固定在 `/auth/v1`，服务 API 固定在 `/api/control/v1`；邀请 token 只存哈希且单次消费，成员读取和变更只作用于当前 Organization，破坏性变更使用新主版本。
 - 账号、Session 或 entitlement 写入必须在同一事务追加对应失效事件：单 Session 登出用 `session_revoked`，纯资料变更用 `profile_changed`，权限或账号状态变更用 `principal_changed`，套餐或成员额度变更用 `entitlement_changed`。
+- 所有产生身份失效事件的事务先通过 `beginIdentityWrite` 锁定 Control 状态，再取业务锁；导入复用相同状态锁。不能仅依赖 PostgreSQL 自增 ID，否则晚提交的小 ID 会被消费游标越过。
+- 组织撤权事件同时携带 `organization_id` 与 `membership_revoked`，供 Relay 同事务撤销 Room 真人/Agent 成员与执行资格；Agent 目录、归属校验和发布都要求其所有者当前仍有有效组织与部署访问。SQLite→PostgreSQL 导入必须保留失效事件原 ID 并推进目标序列，不能令已有 Relay 游标越过后续撤权。
 - Control 不接收 Nexus token 用量，也不保存公共 Provider 或项目 ACL；前者是 Nexus 本地执行事实，后两者是 Nexus 运行资源。
 
 ## 目录

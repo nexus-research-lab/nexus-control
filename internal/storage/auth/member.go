@@ -131,7 +131,7 @@ func (r *Repository) UpdateMember(
 	nextName string,
 	now time.Time,
 ) (*DeploymentMemberRecord, error) {
-	tx, err := r.db.BeginTx(ctx, nil)
+	tx, err := r.beginIdentityWrite(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -197,15 +197,9 @@ WHERE deployment_id = `+r.bind(3)+` AND user_id = `+r.bind(4)+` AND revoked_at I
 		}
 	}
 	if target.Role != nextRole || target.MembershipStatus != nextStatus {
-		if err = r.appendIdentityInvalidation(
-			ctx,
-			tx,
-			deploymentID,
-			userID,
-			"",
-			"principal_changed",
-			now,
-		); err != nil {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO identity_invalidations
+			(deployment_id, user_id, reason, created_at, organization_id, membership_revoked)
+			VALUES (`+r.dialect.BindList(6)+`)`, deploymentID, userID, "principal_changed", now, organizationID, nextStatus != "active"); err != nil {
 			return nil, err
 		}
 	}

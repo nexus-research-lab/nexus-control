@@ -119,7 +119,7 @@ func (r *Repository) UpsertSubscriptionPlan(
 	record SubscriptionPlanRecord,
 	now time.Time,
 ) error {
-	tx, err := r.db.BeginTx(ctx, nil)
+	tx, err := r.beginIdentityWrite(ctx)
 	if err != nil {
 		return err
 	}
@@ -156,7 +156,7 @@ func (r *Repository) SetMemberEntitlement(
 	planKey string,
 	now time.Time,
 ) error {
-	tx, err := r.db.BeginTx(ctx, nil)
+	tx, err := r.beginIdentityWrite(ctx)
 	if err != nil {
 		return err
 	}

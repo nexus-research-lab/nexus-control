@@ -59,6 +59,14 @@ func (s *HTTPServer) mount() {
 	s.router.HandleFunc("POST "+webBase+"/profile/password/receipt/not-applied", s.webPasswordSettle)
 	s.router.HandleFunc("GET "+webBase+"/members", s.webMembers)
 	s.router.HandleFunc("GET "+webBase+"/directory/members", s.webMemberDirectory)
+	s.router.HandleFunc("GET "+webBase+"/agents", s.webAgents)
+	s.router.HandleFunc("GET "+webBase+"/nodes", s.webNodes)
+	s.router.HandleFunc("POST "+webBase+"/nodes", s.webRegisterNode)
+	s.router.HandleFunc("GET "+webBase+"/nodes/{node_id}", s.webNode)
+	s.router.HandleFunc("DELETE "+webBase+"/nodes/{node_id}", s.webRevokeNode)
+	s.router.HandleFunc("POST "+webBase+"/nodes/token", s.nodeToken)
+	s.router.HandleFunc("GET "+webBase+"/directory/agents", s.webAgentDirectory)
+	s.router.HandleFunc("PUT "+webBase+"/agents/{source_agent_id}", s.webPublishAgent)
 	s.router.HandleFunc("POST "+webBase+"/members", s.webCreateMember)
 	s.router.HandleFunc("PATCH "+webBase+"/members/{user_id}", s.webUpdateMember)
 	s.router.HandleFunc("GET "+webBase+"/organization/invitations", s.webListOrganizationInvitations)
@@ -81,6 +89,7 @@ func (s *HTTPServer) mount() {
 	internal.HandleFunc("GET "+base+"/internal/identity-invalidations", s.internalIdentityInvalidations)
 	internal.HandleFunc("POST "+base+"/internal/humans/verify", s.internalVerifyHuman)
 	internal.HandleFunc("POST "+base+"/internal/organizations/members/verify", s.internalVerifyOrganizationMembers)
+	internal.HandleFunc("POST "+base+"/internal/agents/verify", s.internalVerifyAgents)
 	internal.HandleFunc("POST "+base+"/internal/members/manage", s.internalManageMembers)
 	internal.HandleFunc("GET "+base+"/internal/users/{user_id}/role", s.internalRole)
 	internal.HandleFunc(
@@ -217,6 +226,26 @@ func (s *HTTPServer) internalVerifyOrganizationMembers(w http.ResponseWriter, r 
 		return
 	}
 	s.writeData(w, r, map[string]bool{"valid": true})
+}
+
+func (s *HTTPServer) internalVerifyAgents(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		DeploymentID   string   `json:"deployment_id"`
+		OrganizationID string   `json:"organization_id"`
+		OwnerUserID    string   `json:"owner_user_id"`
+		AgentIDs       []string `json:"agent_ids"`
+	}
+	if !s.decode(w, r, &input) {
+		return
+	}
+	agents, err := s.service.VerifyOwnedAgents(
+		r.Context(), input.DeploymentID, input.OrganizationID, input.OwnerUserID, input.AgentIDs,
+	)
+	if err != nil {
+		s.writeServiceError(w, r, err)
+		return
+	}
+	s.writeData(w, r, map[string]any{"agents": agents})
 }
 
 func (s *HTTPServer) internalRole(w http.ResponseWriter, r *http.Request) {

@@ -32,6 +32,9 @@ func TestImportControlSQLitePreservesAuthority(t *testing.T) {
 	if _, err = sourceService.UpdateAvatar(ctx, owner.UserID, "avatar-owner"); err != nil {
 		t.Fatal(err)
 	}
+	if _, err = sourceService.PublishAgent(ctx, *owner, PublishAgentInput{SourceAgentID: "nexus", Name: "Nexus"}); err != nil {
+		t.Fatal(err)
+	}
 	if _, err = sourceService.Login(ctx, LoginInput{Username: "admin", Password: "password-123"}); err != nil {
 		t.Fatal(err)
 	}
@@ -66,6 +69,10 @@ func TestImportControlSQLitePreservesAuthority(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := readAuthorityRows(t, sourceDatabase)
+	wantEvents, err := sourceService.ListIdentityInvalidations(ctx, 0, 256)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err = sourceDatabase.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -85,8 +92,12 @@ func TestImportControlSQLitePreservesAuthority(t *testing.T) {
 	if err = targetDatabase.QueryRowContext(ctx, `SELECT COUNT(*) FROM identity_invalidations`).Scan(&invalidations); err != nil {
 		t.Fatal(err)
 	}
-	if sessions != 0 || invalidations != 0 {
+	if sessions != 0 || invalidations != len(wantEvents) {
 		t.Fatalf("临时状态被迁移: sessions=%d invalidations=%d", sessions, invalidations)
+	}
+	gotEvents, err := targetService.ListIdentityInvalidations(ctx, 0, 256)
+	if err != nil || !reflect.DeepEqual(gotEvents, wantEvents) {
+		t.Fatalf("失效游标或撤权事实丢失: %+v, %v", gotEvents, err)
 	}
 	login, err := targetService.Login(ctx, LoginInput{Username: "admin", Password: "password-123"})
 	if err != nil {
@@ -179,15 +190,16 @@ func newImportTestService(t *testing.T, path string) (*sql.DB, *Service) {
 func readAuthorityRows(t *testing.T, database *sql.DB) map[string][][]string {
 	t.Helper()
 	queries := map[string]string{
-		"deployments":  `SELECT deployment_id, name, status, created_at, updated_at FROM deployments ORDER BY deployment_id`,
-		"organizations": `SELECT organization_id, deployment_id, name, status, created_at, updated_at FROM organizations ORDER BY organization_id`,
+		"deployments":              `SELECT deployment_id, name, status, created_at, updated_at FROM deployments ORDER BY deployment_id`,
+		"organizations":            `SELECT organization_id, deployment_id, name, status, created_at, updated_at FROM organizations ORDER BY organization_id`,
 		"organization_memberships": `SELECT organization_id, user_id, role, status, created_at, updated_at FROM organization_memberships ORDER BY organization_id, user_id`,
-		"users":        `SELECT user_id, username, display_name, status, avatar, last_login_at, created_at, updated_at FROM users ORDER BY user_id`,
-		"identities":   `SELECT identity_id, user_id, provider, subject, created_at, updated_at FROM identities ORDER BY identity_id`,
-		"credentials":  `SELECT credential_id, user_id, password_hash, password_algo, password_updated_at, created_at, updated_at FROM password_credentials ORDER BY credential_id`,
-		"memberships":  `SELECT deployment_id, user_id, role, status, created_at, updated_at FROM deployment_memberships ORDER BY deployment_id, user_id`,
-		"plans":        `SELECT deployment_id, plan_key, display_name, status, monthly_token_limit, notes, sort_order, created_at, updated_at FROM subscription_plans ORDER BY deployment_id, plan_key`,
-		"entitlements": `SELECT deployment_id, user_id, plan_key, created_at, updated_at FROM member_entitlements ORDER BY deployment_id, user_id`,
+		"users":                    `SELECT user_id, username, display_name, status, avatar, last_login_at, created_at, updated_at FROM users ORDER BY user_id`,
+		"identities":               `SELECT identity_id, user_id, provider, subject, created_at, updated_at FROM identities ORDER BY identity_id`,
+		"credentials":              `SELECT credential_id, user_id, password_hash, password_algo, password_updated_at, created_at, updated_at FROM password_credentials ORDER BY credential_id`,
+		"memberships":              `SELECT deployment_id, user_id, role, status, created_at, updated_at FROM deployment_memberships ORDER BY deployment_id, user_id`,
+		"agents":                   `SELECT agent_id, deployment_id, organization_id, owner_user_id, source_agent_id, name, avatar, status, created_at, updated_at FROM agents ORDER BY agent_id`,
+		"plans":                    `SELECT deployment_id, plan_key, display_name, status, monthly_token_limit, notes, sort_order, created_at, updated_at FROM subscription_plans ORDER BY deployment_id, plan_key`,
+		"entitlements":             `SELECT deployment_id, user_id, plan_key, created_at, updated_at FROM member_entitlements ORDER BY deployment_id, user_id`,
 	}
 	result := make(map[string][][]string, len(queries))
 	for name, query := range queries {

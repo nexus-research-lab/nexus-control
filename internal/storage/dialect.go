@@ -45,6 +45,8 @@ func (d SQLDialect) Bind(index int) string {
 	return "?"
 }
 
+func (d SQLDialect) IsPostgres() bool { return d.postgres }
+
 func (d SQLDialect) BindList(count int) string {
 	items := make([]string, 0, count)
 	for index := 1; index <= count; index++ {

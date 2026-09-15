@@ -6,6 +6,20 @@ import (
 	"time"
 )
 
+// beginIdentityWrite 在业务锁之前取得序列写锁，保证事件 ID 不会越过尚未提交的事务。
+func (r *Repository) beginIdentityWrite(ctx context.Context) (*sql.Tx, error) {
+	// ponytail: 低频身份变更复用 Control 单行锁；吞吐成为瓶颈后改为按提交顺序发布的 outbox。
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	if err = r.lockControlState(ctx, tx); err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+	return tx, nil
+}
+
 func (r *Repository) appendIdentityInvalidation(
 	ctx context.Context,
 	tx *sql.Tx,
@@ -34,7 +48,7 @@ func (r *Repository) ListIdentityInvalidations(
 	limit int,
 ) ([]IdentityInvalidationRecord, error) {
 	rows, err := r.db.QueryContext(ctx, `
-SELECT event_id, deployment_id, user_id, session_id, reason, created_at
+SELECT event_id, deployment_id, user_id, session_id, reason, created_at, organization_id, membership_revoked
 FROM identity_invalidations
 WHERE event_id > `+r.bind(1)+`
 ORDER BY event_id ASC
@@ -54,6 +68,7 @@ LIMIT `+r.bind(2), after, limit)
 			&sessionID,
 			&event.Reason,
 			&event.CreatedAt,
+			&event.OrganizationID, &event.MembershipRevoked,
 		); err != nil {
 			return nil, err
 		}

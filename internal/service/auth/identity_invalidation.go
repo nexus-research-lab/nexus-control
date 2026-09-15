@@ -31,6 +31,7 @@ func (s *Service) ListIdentityInvalidations(
 			EventID: record.EventID, DeploymentID: record.DeploymentID,
 			UserID: record.UserID, SessionID: record.SessionID,
 			Reason: record.Reason, CreatedAt: record.CreatedAt,
+			OrganizationID: record.OrganizationID, MembershipRevoked: record.MembershipRevoked,
 		})
 	}
 	return events, nil

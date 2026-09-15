@@ -90,13 +90,28 @@ type DeploymentMemberRecord struct {
 	UpdatedAt        time.Time
 }
 
+type AgentRecord struct {
+	AgentID        string
+	DeploymentID   string
+	OrganizationID string
+	OwnerUserID    string
+	SourceAgentID  string
+	Name           string
+	Avatar         string
+	Status         string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
 type IdentityInvalidationRecord struct {
-	EventID      int64
-	DeploymentID string
-	UserID       string
-	SessionID    string
-	Reason       string
-	CreatedAt    time.Time
+	OrganizationID    string
+	MembershipRevoked bool
+	EventID           int64
+	DeploymentID      string
+	UserID            string
+	SessionID         string
+	Reason            string
+	CreatedAt         time.Time
 }
 
 type RevokedSessionRecord struct {
@@ -194,6 +209,7 @@ type ImportedUserRecord struct {
 }
 
 type ImportedDeploymentRecord struct {
+	Invalidations      []IdentityInvalidationRecord
 	DeploymentID       string
 	Name               string
 	Status             string

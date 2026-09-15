@@ -73,7 +73,7 @@ func (r *Repository) RevokeSession(
 	tokenHash string,
 	now time.Time,
 ) (*RevokedSessionRecord, error) {
-	tx, err := r.db.BeginTx(ctx, nil)
+	tx, err := r.beginIdentityWrite(ctx)
 	if err != nil {
 		return nil, err
 	}
