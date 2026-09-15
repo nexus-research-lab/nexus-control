@@ -15,6 +15,7 @@ import (
 
 // Config 是 Control 的最小运行配置。
 type Config struct {
+	RegistrationEnabled  bool
 	Address              string
 	LogLevel             string
 	LogFormat            string
@@ -68,6 +69,7 @@ func Load() Config {
 		}
 	}
 	return Config{
+		RegistrationEnabled:  envBool("CONTROL_REGISTRATION_ENABLED", false),
 		Address:              env("CONTROL_ADDRESS", "0.0.0.0:8020"),
 		LogLevel:             logLevel,
 		LogFormat:            logFormat,

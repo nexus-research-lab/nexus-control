@@ -148,7 +148,7 @@ func TestWebSetupLoginAndMemberAdministration(t *testing.T) {
 		t.Fatal(err)
 	}
 	adminOnly.Body.Close()
-	if adminOnly.StatusCode != http.StatusForbidden {
+	if adminOnly.StatusCode != http.StatusOK {
 		t.Fatalf("member administration status = %d", adminOnly.StatusCode)
 	}
 
@@ -255,11 +255,11 @@ func TestWebSetupLoginAndMemberAdministration(t *testing.T) {
 		)
 	}
 
-	revokedMemberLogin := doWebJSON(t, client, http.MethodPost, server.URL+"/auth/v1/login", server.URL, map[string]any{
+	revokedMemberLogin := doWebJSON(t, memberClient, http.MethodPost, server.URL+"/auth/v1/login", server.URL, map[string]any{
 		"username": "member", "password": "password-456",
 	}, "")
 	defer revokedMemberLogin.Body.Close()
-	if revokedMemberLogin.StatusCode != http.StatusUnauthorized {
+	if revokedMemberLogin.StatusCode != http.StatusOK {
 		t.Fatalf("revoked member login status = %d", revokedMemberLogin.StatusCode)
 	}
 

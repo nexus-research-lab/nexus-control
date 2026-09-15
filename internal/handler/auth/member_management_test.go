@@ -60,7 +60,7 @@ func TestManagedMembersRequireLiveAdminAndRejectStaleUpdates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if code, _ = call(memberLogin.Principal, "list", "", 0, nil, cfg.ServiceToken); code != http.StatusForbidden {
+	if code, _ = call(memberLogin.Principal, "list", "", 0, nil, cfg.ServiceToken); code != http.StatusOK {
 		t.Fatalf("member read: %d", code)
 	}
 	_, data = call(login.Principal, "list", "", 0, nil, cfg.ServiceToken)
@@ -89,8 +89,8 @@ func TestManagedMembersRequireLiveAdminAndRejectStaleUpdates(t *testing.T) {
 	if code, _ = call(login.Principal, "remove", member.UserID, member.UpdatedAt.UnixMicro(), nil, cfg.ServiceToken); code != http.StatusOK {
 		t.Fatalf("remove: %d", code)
 	}
-	if principal, resolveErr := service.ResolveSession(t.Context(), memberLogin.SessionToken); resolveErr != nil || principal != nil {
-		t.Fatal("removed member session still valid")
+	if principal, resolveErr := service.ResolveSession(t.Context(), memberLogin.SessionToken); resolveErr != nil || principal == nil || principal.OrganizationID != "" {
+		t.Fatal("退出组织应保留账号 Session，但清除组织身份")
 	}
 	if err = service.Logout(t.Context(), login.SessionToken); err != nil {
 		t.Fatal(err)

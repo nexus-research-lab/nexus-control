@@ -10,7 +10,7 @@ import (
 
 // ListMembers 返回当前 Organization 的成员。
 func (s *Service) ListMembers(ctx context.Context, actor Principal) ([]DeploymentMember, error) {
-	if actor.Role != RoleOwner && actor.Role != RoleAdmin {
+	if actor.OrganizationID == "" {
 		return nil, ErrForbidden
 	}
 	records, err := s.repository.ListMembers(ctx, actor.DeploymentID, actor.OrganizationID)
@@ -74,7 +74,7 @@ func (s *Service) VerifyOrganizationMembers(
 
 // CreateMember 创建密码账号并加入当前 Deployment。
 func (s *Service) CreateMember(ctx context.Context, actor Principal, input CreateMemberInput) (*DeploymentMember, error) {
-	if actor.Role != RoleOwner && actor.Role != RoleAdmin {
+	if actor.OrganizationRole != RoleOwner && actor.OrganizationRole != RoleAdmin {
 		return nil, ErrForbidden
 	}
 	username, err := normalizeUsername(input.Username)
@@ -85,10 +85,10 @@ func (s *Service) CreateMember(ctx context.Context, actor Principal, input Creat
 		return nil, errors.Join(ErrRequestInvalid, err)
 	}
 	role, err := normalizeRole(input.Role)
-	if err != nil {
+	if err != nil || role == RoleOwner {
 		return nil, errors.Join(ErrRequestInvalid, err)
 	}
-	if actor.Role == RoleAdmin && role != RoleMember {
+	if actor.OrganizationRole == RoleAdmin && role != RoleMember {
 		return nil, ErrForbidden
 	}
 	displayName := strings.TrimSpace(input.DisplayName)
@@ -102,7 +102,7 @@ func (s *Service) CreateMember(ctx context.Context, actor Principal, input Creat
 	if err != nil {
 		return nil, err
 	}
-	record, err := s.repository.CreateMember(ctx, store.NewMemberRecord{
+	record, err := s.repository.CreateMember(ctx, actor.UserID, store.NewMemberRecord{
 		DeploymentID:   actor.DeploymentID,
 		OrganizationID: actor.OrganizationID,
 		UserID:         newID("user"),
@@ -126,7 +126,7 @@ func (s *Service) CreateMember(ctx context.Context, actor Principal, input Creat
 
 // UpdateMember 更新成员角色或状态。
 func (s *Service) UpdateMember(ctx context.Context, actor Principal, userID string, input UpdateMemberInput) (*DeploymentMember, error) {
-	if actor.Role != RoleOwner && actor.Role != RoleAdmin {
+	if actor.OrganizationRole != RoleOwner && actor.OrganizationRole != RoleAdmin {
 		return nil, ErrForbidden
 	}
 	userID = strings.TrimSpace(userID)
@@ -151,10 +151,16 @@ func (s *Service) UpdateMember(ctx context.Context, actor Principal, userID stri
 		}
 	}
 	nextRole, nextStatus := target.Role, target.MembershipStatus
+	if target.MembershipStatus != MembershipActive || target.Role == RoleOwner {
+		return nil, ErrForbidden
+	}
 	if input.Role != nil {
 		nextRole, err = normalizeRole(*input.Role)
 		if err != nil {
 			return nil, errors.Join(ErrRequestInvalid, err)
+		}
+		if nextRole == RoleOwner || target.Role == RoleOwner {
+			return nil, ErrForbidden
 		}
 	}
 	if input.Status != nil {
@@ -163,14 +169,14 @@ func (s *Service) UpdateMember(ctx context.Context, actor Principal, userID stri
 			return nil, errors.Join(ErrRequestInvalid, errors.New("status 仅支持 active 或 revoked"))
 		}
 	}
-	if actor.Role == RoleAdmin && (target.Role != RoleMember || nextRole != RoleMember) {
+	if actor.OrganizationRole == RoleAdmin && (target.Role != RoleMember || nextRole != RoleMember) {
 		return nil, ErrForbidden
 	}
 	if actor.UserID == target.UserID && nextStatus == MembershipRevoked {
 		return nil, errors.Join(ErrConflict, errors.New("不能停用当前登录账号"))
 	}
 	record, err := s.repository.UpdateMember(
-		ctx, actor.DeploymentID, actor.OrganizationID, userID,
+		ctx, actor.DeploymentID, actor.OrganizationID, userID, actor.UserID,
 		target.Role, target.MembershipStatus, target.UpdatedAt.UnixMicro(),
 		nextRole, nextStatus, nextName, s.now(),
 	)

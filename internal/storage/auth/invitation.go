@@ -11,7 +11,15 @@ func (r *Repository) CreateOrganizationInvitation(
 	ctx context.Context,
 	record OrganizationInvitationRecord,
 ) (*OrganizationInvitationRecord, error) {
-	_, err := r.db.ExecContext(ctx, `
+	tx, err := r.beginIdentityWrite(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	if err = r.requireOrganizationManager(ctx, tx, record.OrganizationID, record.CreatedByUserID, record.Role); err != nil {
+		return nil, err
+	}
+	_, err = tx.ExecContext(ctx, `
 INSERT INTO organization_invitations
     (invitation_id, organization_id, token_hash, role, created_by_user_id,
      expires_at, created_at, updated_at)
@@ -20,6 +28,9 @@ VALUES (`+r.dialect.BindList(8)+`)`,
 		record.CreatedByUserID, record.ExpiresAt, record.CreatedAt, record.UpdatedAt,
 	)
 	if err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(); err != nil {
 		return nil, err
 	}
 	return &record, nil
@@ -77,9 +88,18 @@ func (r *Repository) RevokeOrganizationInvitation(
 	ctx context.Context,
 	organizationID string,
 	invitationID string,
+	actorUserID string,
 	now time.Time,
 ) error {
-	result, err := r.db.ExecContext(ctx, `
+	tx, err := r.beginIdentityWrite(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err = r.requireInvitationManager(ctx, tx, organizationID, invitationID, actorUserID); err != nil {
+		return err
+	}
+	result, err := tx.ExecContext(ctx, `
 UPDATE organization_invitations SET revoked_at = `+r.bind(1)+`, updated_at = `+r.bind(2)+`
 WHERE organization_id = `+r.bind(3)+` AND invitation_id = `+r.bind(4)+`
   AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > `+r.bind(5),
@@ -91,12 +111,20 @@ WHERE organization_id = `+r.bind(3)+` AND invitation_id = `+r.bind(4)+`
 	if count, _ := result.RowsAffected(); count != 1 {
 		return ErrInvitationInvalid
 	}
-	return nil
+	return tx.Commit()
 }
 
 // DeleteOrganizationInvitation 在同一语句中限定租户和终态，避免先查后删的竞态。
-func (r *Repository) DeleteOrganizationInvitation(ctx context.Context, organizationID, invitationID string, now time.Time) error {
-	result, err := r.db.ExecContext(ctx, `
+func (r *Repository) DeleteOrganizationInvitation(ctx context.Context, organizationID, invitationID, actorUserID string, now time.Time) error {
+	tx, err := r.beginIdentityWrite(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err = r.requireInvitationManager(ctx, tx, organizationID, invitationID, actorUserID); err != nil {
+		return err
+	}
+	result, err := tx.ExecContext(ctx, `
 DELETE FROM organization_invitations
 WHERE organization_id = `+r.bind(1)+` AND invitation_id = `+r.bind(2)+`
   AND (accepted_at IS NOT NULL OR revoked_at IS NOT NULL OR expires_at <= `+r.bind(3)+`)`,
@@ -111,14 +139,26 @@ WHERE organization_id = `+r.bind(1)+` AND invitation_id = `+r.bind(2)+`
 	if count != 1 {
 		return ErrInvitationInvalid
 	}
-	return nil
+	return tx.Commit()
+}
+
+func (r *Repository) requireInvitationManager(ctx context.Context, tx *sql.Tx, organizationID, invitationID, actorUserID string) error {
+	var role string
+	err := tx.QueryRowContext(ctx, `SELECT role FROM organization_invitations WHERE organization_id=`+r.bind(1)+` AND invitation_id=`+r.bind(2), organizationID, invitationID).Scan(&role)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrInvitationInvalid
+	}
+	if err != nil {
+		return err
+	}
+	return r.requireOrganizationManager(ctx, tx, organizationID, actorUserID, role)
 }
 
 func (r *Repository) AcceptOrganizationInvitation(
 	ctx context.Context,
 	input AcceptOrganizationInvitationRecord,
 ) (*DeploymentMemberRecord, error) {
-	tx, err := r.db.BeginTx(ctx, nil)
+	tx, err := r.beginIdentityWrite(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +194,7 @@ VALUES (`+r.dialect.BindList(6)+`) ON CONFLICT(username) DO NOTHING`,
 	}{
 		{`INSERT INTO identities (identity_id, user_id, provider, subject, created_at, updated_at) VALUES (` + r.dialect.BindList(6) + `)`, []any{input.IdentityID, input.UserID, "password", input.Username, input.AcceptedAt, input.AcceptedAt}},
 		{`INSERT INTO password_credentials (credential_id, user_id, password_hash, password_algo, password_updated_at, created_at, updated_at) VALUES (` + r.dialect.BindList(7) + `)`, []any{input.CredentialID, input.UserID, input.PasswordHash, "argon2id", input.AcceptedAt, input.AcceptedAt, input.AcceptedAt}},
-		{`INSERT INTO deployment_memberships (deployment_id, user_id, role, status, created_at, updated_at) VALUES (` + r.dialect.BindList(6) + `)`, []any{invitation.DeploymentID, input.UserID, invitation.Role, "active", input.AcceptedAt, input.AcceptedAt}},
+		{`INSERT INTO deployment_memberships (deployment_id, user_id, role, status, created_at, updated_at) VALUES (` + r.dialect.BindList(6) + `)`, []any{invitation.DeploymentID, input.UserID, "member", "active", input.AcceptedAt, input.AcceptedAt}},
 		{`INSERT INTO organization_memberships (organization_id, user_id, role, status, created_at, updated_at) VALUES (` + r.dialect.BindList(6) + `)`, []any{invitation.OrganizationID, input.UserID, invitation.Role, "active", input.AcceptedAt, input.AcceptedAt}},
 	}
 	for _, statement := range statements {

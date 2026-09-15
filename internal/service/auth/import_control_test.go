@@ -68,6 +68,26 @@ func TestImportControlSQLitePreservesAuthority(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
+	sourceService.registrationEnabled = true
+	for _, username := range []string{"independent", "other-owner"} {
+		if err = sourceService.RegisterAccount(ctx, LoginInput{Username: username, Password: "password-123"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	other, err := sourceService.Login(ctx, LoginInput{Username: "other-owner", Password: "password-123"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = sourceService.MutateOrganization(ctx, other.Principal, "create", OrganizationInput{Name: "Other"}); err != nil {
+		t.Fatal(err)
+	}
+	otherPrincipal, err := sourceService.ResolveSession(ctx, other.SessionToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = sourceService.CreateOrganizationInvitation(ctx, *otherPrincipal, CreateOrganizationInvitationInput{Role: RoleMember}); err != nil {
+		t.Fatal(err)
+	}
 	want := readAuthorityRows(t, sourceDatabase)
 	wantEvents, err := sourceService.ListIdentityInvalidations(ctx, 0, 256)
 	if err != nil {
@@ -106,8 +126,8 @@ func TestImportControlSQLitePreservesAuthority(t *testing.T) {
 	if login.Principal.DeploymentID != owner.DeploymentID || login.Principal.UserID != owner.UserID {
 		t.Fatalf("迁移后身份 ID = %+v", login.Principal)
 	}
-	if _, err = targetService.Login(ctx, LoginInput{Username: "member", Password: "password-456"}); !errors.Is(err, ErrInvalidCredentials) {
-		t.Fatalf("revoked member login err = %v", err)
+	if result, loginErr := targetService.Login(ctx, LoginInput{Username: "member", Password: "password-456"}); loginErr != nil || result.Principal.OrganizationID != "" {
+		t.Fatalf("退出组织后的账号应仍可登录: %+v %v", result, loginErr)
 	}
 	if err = targetService.ImportControlSQLite(ctx, sourcePath); !errors.Is(err, ErrAlreadySetup) {
 		t.Fatalf("重复导入 err = %v", err)
@@ -190,6 +210,7 @@ func newImportTestService(t *testing.T, path string) (*sql.DB, *Service) {
 func readAuthorityRows(t *testing.T, database *sql.DB) map[string][][]string {
 	t.Helper()
 	queries := map[string]string{
+		"invitations":              `SELECT invitation_id,organization_id,token_hash,role,created_by_user_id,accepted_by_user_id,expires_at,accepted_at,revoked_at,created_at,updated_at FROM organization_invitations ORDER BY invitation_id`,
 		"deployments":              `SELECT deployment_id, name, status, created_at, updated_at FROM deployments ORDER BY deployment_id`,
 		"organizations":            `SELECT organization_id, deployment_id, name, status, created_at, updated_at FROM organizations ORDER BY organization_id`,
 		"organization_memberships": `SELECT organization_id, user_id, role, status, created_at, updated_at FROM organization_memberships ORDER BY organization_id, user_id`,

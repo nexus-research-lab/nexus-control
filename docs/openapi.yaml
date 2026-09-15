@@ -6,6 +6,46 @@ info:
 servers:
   - url: /
 paths:
+  /auth/v1/register:
+    post:
+      operationId: registerAccount
+      description: 需要同源 Origin 且 CONTROL_REGISTRATION_ENABLED=true；创建无组织的普通平台账号并登录。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/WebLoginInput"}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "400": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /auth/v1/organization/{action}:
+    post:
+      operationId: mutateOrganization
+      security: [{CookieSession: []}]
+      description: 同源 Origin。无组织可 create；owner/admin 可 rename；非 owner 可 leave；仅 owner 可 transfer/dissolve。组织操作不修改平台角色、账号或本地数据。返回最新认证状态。
+      parameters:
+        - name: action
+          in: path
+          required: true
+          schema: {type: string, enum: [create, rename, leave, transfer, dissolve]}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                name: {type: string, minLength: 1, maxLength: 128, description: create/rename 必填}
+                target_user_id: {type: string, minLength: 1, maxLength: 128, description: transfer 必填，同组织有效成员}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
   /auth/v1/nodes:
     get:
       operationId: listExecutionNodes
@@ -113,6 +153,7 @@ paths:
   /auth/v1/status:
     get:
       operationId: webAuthStatus
+      description: role 为平台角色，organization_role 为组织角色，二者不可互相替代。无组织的有效账号仍 authenticated=true；registration_enabled 表示是否开放普通账号注册。
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -233,6 +274,7 @@ paths:
   /auth/v1/members:
     get:
       operationId: listOrganizationMembers
+      description: 组织内所有有效成员可读，写入只允许组织 owner/admin；不要求平台管理员。
       security:
         - CookieSession: []
       responses:
@@ -407,13 +449,17 @@ paths:
   /auth/v1/organization-invitations/{token}/accept:
     post:
       operationId: acceptOrganizationInvitation
+      description: 同源 Origin。未登录提交账号资料注册加入；已登录提交空对象并加入，必须当前无组织，不重设账号密码。邀请单次消费。
       parameters:
         - {$ref: "#/components/parameters/InvitationToken"}
       requestBody:
         required: true
         content:
           application/json:
-            schema: {$ref: "#/components/schemas/AcceptOrganizationInvitationInput"}
+            schema:
+              oneOf:
+                - {$ref: "#/components/schemas/AcceptOrganizationInvitationInput"}
+                - {type: object, maxProperties: 0}
       responses:
         "200": {$ref: "#/components/responses/Success"}
         "400": {$ref: "#/components/responses/Error"}
@@ -887,7 +933,7 @@ components:
           maxLength: 1024
         role:
           type: string
-          enum: [owner, admin, member]
+          enum: [admin, member]
           default: member
     CreateOrganizationInvitationInput:
       type: object
@@ -919,10 +965,10 @@ components:
         expected_version: {type: integer, format: int64}
         role:
           type: string
-          enum: [owner, admin, member]
+          enum: [admin, member]
         status:
           type: string
-          enum: [active, revoked]
+          enum: [revoked]
     DeploymentMember:
       type: object
       required: [deployment_id, user_id, username, display_name, role, membership_status, created_at, updated_at]
@@ -1126,7 +1172,7 @@ components:
           description: 仅 session_revoked 事件携带；普通值撤销浏览器 Session 及其派生 Node，node:<node_id> 只撤销精确 Node。
         reason:
           type: string
-          enum: [principal_changed, profile_changed, session_revoked, entitlement_changed]
+          enum: [principal_changed, profile_changed, session_revoked, entitlement_changed, organization_changed]
         created_at:
           type: string
           format: date-time

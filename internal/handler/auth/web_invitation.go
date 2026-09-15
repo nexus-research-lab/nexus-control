@@ -83,6 +83,19 @@ func (s *HTTPServer) webAcceptOrganizationInvitation(w http.ResponseWriter, r *h
 	if !s.requireWebMutationOrigin(w, r) {
 		return
 	}
+	principal, err := s.webPrincipal(r)
+	if err != nil {
+		s.writeServiceError(w, r, err)
+		return
+	}
+	if principal != nil {
+		if err := s.service.JoinOrganization(r.Context(), *principal, r.PathValue("token")); err != nil {
+			s.writeServiceError(w, r, err)
+			return
+		}
+		s.webStatus(w, r)
+		return
+	}
 	var input authservice.AcceptOrganizationInvitationInput
 	if !s.decode(w, r, &input) {
 		return

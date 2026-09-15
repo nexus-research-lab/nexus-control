@@ -71,6 +71,10 @@ func (s *HTTPServer) mount() {
 	s.router.HandleFunc("PATCH "+webBase+"/members/{user_id}", s.webUpdateMember)
 	s.router.HandleFunc("GET "+webBase+"/organization/invitations", s.webListOrganizationInvitations)
 	s.router.HandleFunc("POST "+webBase+"/organization/invitations", s.webCreateOrganizationInvitation)
+	s.router.HandleFunc("POST "+webBase+"/register", s.webRegister)
+	for _, action := range []string{"create", "rename", "leave", "transfer", "dissolve"} {
+		s.router.HandleFunc("POST "+webBase+"/organization/"+action, s.webOrganizationAction(action))
+	}
 	s.router.HandleFunc("DELETE "+webBase+"/organization/invitations/{invitation_id}", s.webRevokeOrganizationInvitation)
 	s.router.HandleFunc("DELETE "+webBase+"/organization/invitations/{invitation_id}/record", s.webDeleteOrganizationInvitation)
 	s.router.HandleFunc("GET "+webBase+"/organization-invitations/{token}", s.webPreviewOrganizationInvitation)

@@ -2,7 +2,7 @@
 
 Nexus Control 是 Nexus 的账号、组织、部署与服务额度权威。它管理真人用户、密码、浏览器 Session、Deployment、Organization Membership、订阅套餐与成员 entitlement，并向 Nexus Server 与 Nexus Relay 签发短期 Principal。Deployment 表示安装实例，Organization 表示多人协作租户。
 
-当前首个切片支持单 Deployment、单 active Organization，以及 SQLite、PostgreSQL 两种数据库；成员目录只返回当前 Organization，Principal 同时携带部署和组织边界。受信 Nexus Gateway 在建群前通过 Control internal API 批量校验真人成员归属。Relay 的 Room/Message、Agent 执行和 OAuth 不在本仓实现。
+当前支持单 Deployment 下多个 Organization，以及 SQLite、PostgreSQL 两种数据库；每个账号最多一个 active Organization，也可以无组织。成员目录只返回当前 Organization，Principal 的 role 是平台角色、organization_role 是组织角色，二者独立。受信 Nexus Gateway 在建群前通过 Control internal API 批量校验真人成员归属。Relay 的 Room/Message、Agent 执行和 OAuth 不在本仓实现。
 
 Node 授权使用 `/auth/v1/nodes` 注册、列出（最近 100 条）与撤销；注册必须有浏览器 Cookie、同源 Origin，以及明确选择的本人 Agent ID（1–32 个）。宿主生成并安全保存 32 字节随机 base64url 凭据，Control 仅保存 SHA-256 哈希；相同 Node ID、凭据和完整范围可以重放，不能覆盖或复活已撤销授权。`POST /auth/v1/nodes/token` 仅接受该独立凭据的 Bearer header，返回 60 秒 `nexus-relay-node` Principal，不使用浏览器 Cookie或服务 token。令牌绑定父 Session，登出后不能继续换取；节点撤销与父 Session 撤销均通过持久身份事件通知 Relay。当前是授权后端，Nexus 设备启用界面和 runtime 消费器尚未接入。
 
@@ -21,7 +21,7 @@ CONTROL_DATABASE_URL=postgres://nexus_control:password@postgres:5432/nexus
 
 PostgreSQL 表固定写入 `control` schema；连接会强制使用该 `search_path`。数据库账号需要能创建该 schema，或由管理员预先创建并授权。签名密钥和服务凭据仍由 `CONTROL_DATA_DIR` 指向的本地持久目录保存，不写入数据库。
 
-首次 owner 可在 Nexus Web 的 `/setup` 页面创建，也可由安装器调用 `POST /api/control/v1/setup/owner`，或设置 `AUTH_INIT_OWNER_PASSWORD` 由服务启动时初始化。Web 初始化需额外设置至少 32 个字符的 `CONTROL_SETUP_TOKEN`；该 capability 不会保存在浏览器中。owner/admin 登录后可在 Nexus 设置页创建一次性 Organization 邀请链接、调整成员角色和访问状态，并管理订阅套餐与成员额度。邀请 token 只在创建响应中返回明文，Control 仅保存哈希；默认七天过期，接受或撤销后不可重用。
+首次平台 owner 可在 Nexus Web 的 `/setup` 页面创建，也可由安装器调用 `POST /api/control/v1/setup/owner`，或设置 `AUTH_INIT_OWNER_PASSWORD` 由服务启动时初始化。Web 初始化需额外设置至少 32 个字符的 `CONTROL_SETUP_TOKEN`；该 capability 不会保存在浏览器中。所有远程用户通过「设置 → 账户 → 组织」创建或管理组织；无组织账号可自行创建，创建者只获得组织 owner，平台订阅运营仍由平台 owner/admin 管理。组织邀请默认七天过期、单次消费，只存 token 哈希；支持新账号注册和已有账号登录后加入。公开注册需显式设置 `CONTROL_REGISTRATION_ENABLED=true`，默认关闭。完整权限与退出/移交/解散规则见 [组织生命周期](docs/organization-lifecycle.md)。
 
 签名私钥默认生成到 `CONTROL_DATA_DIR` 下的 `control-signing.key`，公钥写入 `control-signing.pub`，供 Nexus Server 与 Nexus Relay 只读加载。Runtime audience 默认为 `nexus-runtime`，Relay User audience 固定为 `nexus-relay-user`；Relay Node 凭据不属于本阶段。生产网关只需同源转发 `/auth/v1/*` 到 Control、`/nexus/v1/*` 到 Nexus Server；`/api/control/v1/internal/*` 不应暴露到公网。
 
@@ -64,5 +64,5 @@ go run ./cmd/nexus-control import-control-sqlite \
   --source /path/to/control.db
 ```
 
-命令以只读方式打开源 SQLite，并原样保留 Deployment、Organization、User、账号资料与状态、密码哈希、Membership、Agent 公开身份、订阅套餐、成员 entitlement 和身份失效事件原 ID；目标事件序列同步推进，已有 Relay 消费游标可以继续使用。Session、Node 授权、Organization 邀请和密码修改回执不迁移，切换后用户必须重新登录并重新授权设备。目标只要已有任何 Control 业务数据便拒绝导入，成功后重复执行也会拒绝，避免生成第二套身份。
+命令以只读方式打开源 SQLite，并原样保留 Deployment、全部 Organization、User、账号资料与状态、密码哈希、独立的平台/组织 Membership、组织邀请、Agent 公开身份、订阅套餐、成员 entitlement 和身份失效事件原 ID；目标事件序列同步推进，已有 Relay 消费游标可以继续使用。Session、Node 授权和密码修改回执不迁移，切换后用户必须重新登录并重新授权设备。目标只要已有任何 Control 业务数据便拒绝导入，成功后重复执行也会拒绝，避免生成第二套身份。
 源库必须已经由同版本 Control 完成 migration；未知的新旧 schema 会直接拒绝，避免静默漏字段。

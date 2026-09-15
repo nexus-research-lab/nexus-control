@@ -15,13 +15,14 @@ const relayUserAudience = "nexus-relay-user"
 
 // Service 持有 Control 的认证规则与 Principal 签发入口。
 type Service struct {
-	repository   *store.Repository
-	signer       *Signer
-	now          func() time.Time
-	sessionTTL   time.Duration
-	principalTTL time.Duration
-	audiences    map[string]struct{}
-	setupEnabled bool
+	repository          *store.Repository
+	signer              *Signer
+	now                 func() time.Time
+	sessionTTL          time.Duration
+	principalTTL        time.Duration
+	audiences           map[string]struct{}
+	setupEnabled        bool
+	registrationEnabled bool
 }
 
 // NewService 创建认证服务。
@@ -36,7 +37,8 @@ func NewService(cfg config.Config, database *sql.DB, signer *Signer) *Service {
 			strings.TrimSpace(cfg.PrincipalAudience): {},
 			relayUserAudience:                        {},
 		},
-		setupEnabled: strings.TrimSpace(cfg.SetupToken) != "",
+		setupEnabled:        strings.TrimSpace(cfg.SetupToken) != "",
+		registrationEnabled: cfg.RegistrationEnabled,
 	}
 }
 
@@ -52,6 +54,7 @@ func (s *Service) State(ctx context.Context) (State, error) {
 		return State{}, err
 	}
 	return State{
+		RegistrationEnabled:  s.registrationEnabled && !required,
 		SetupRequired:        required,
 		SetupEnabled:         s.setupEnabled,
 		AuthRequired:         true,
@@ -94,6 +97,7 @@ func (s *Service) SetupOwner(ctx context.Context, input SetupOwnerInput) (*Princ
 		return nil, err
 	}
 	principal := Principal{
+		OrganizationRole: RoleOwner,
 		DeploymentID:     newID("dep"),
 		OrganizationID:   newID("org"),
 		OrganizationName: organizationName,
@@ -240,6 +244,9 @@ func (s *Service) ExchangePrincipal(ctx context.Context, sessionToken, audience 
 
 func (s *Service) signPrincipal(principal Principal, audience string) (string, error) {
 	audience = strings.TrimSpace(audience)
+	if audience == relayUserAudience && (principal.OrganizationID == "" || principal.OrganizationRole == "") {
+		return "", ErrForbidden
+	}
 	if _, ok := s.audiences[audience]; audience == "" || !ok {
 		return "", errors.Join(ErrRequestInvalid, errors.New("Principal audience 无效"))
 	}
@@ -288,6 +295,7 @@ func (s *Service) PublicKey() string { return s.signer.PublicKey() }
 
 func principalFromRecord(record store.PrincipalRecord) Principal {
 	return Principal{
+		OrganizationRole: record.OrganizationRole,
 		DeploymentID:     record.DeploymentID,
 		OrganizationID:   record.OrganizationID,
 		OrganizationName: record.OrganizationName,
@@ -303,6 +311,7 @@ func principalFromRecord(record store.PrincipalRecord) Principal {
 
 func principalRecord(principal Principal) store.PrincipalRecord {
 	return store.PrincipalRecord{
+		OrganizationRole: principal.OrganizationRole,
 		DeploymentID:     principal.DeploymentID,
 		OrganizationID:   principal.OrganizationID,
 		OrganizationName: principal.OrganizationName,

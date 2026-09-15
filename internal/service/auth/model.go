@@ -197,6 +197,7 @@ type OrganizationInvitationPreview struct {
 
 // Principal 是 Control 签发给下游服务的短期身份事实。
 type Principal struct {
+	OrganizationRole string      `json:"organization_role"`
 	NodeID           string      `json:"node_id,omitempty"`
 	ParentSessionID  string      `json:"parent_session_id,omitempty"`
 	AgentIDs         []string    `json:"agent_ids,omitempty"`
@@ -215,6 +216,7 @@ type Principal struct {
 
 // PrincipalClaims 是签名 token 的稳定 v1 claim。
 type PrincipalClaims struct {
+	OrganizationRole string      `json:"organization_role"`
 	NodeID           string      `json:"node_id,omitempty"`
 	ParentSessionID  string      `json:"parent_session_id,omitempty"`
 	AgentIDs         []string    `json:"agent_ids,omitempty"`
@@ -238,6 +240,7 @@ type PrincipalClaims struct {
 
 // State 描述 Control 是否完成首次设置。
 type State struct {
+	RegistrationEnabled  bool `json:"registration_enabled"`
 	SetupRequired        bool `json:"setup_required"`
 	SetupEnabled         bool `json:"setup_enabled"`
 	AuthRequired         bool `json:"auth_required"`

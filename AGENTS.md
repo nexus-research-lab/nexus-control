@@ -4,6 +4,12 @@
 
 ## 边界
 
+- User 独立于 Organization；一个账号最多一个 active 组织，无组织仍可登录和使用个人能力。`Principal.role` 仅表示平台/Deployment 角色，`organization_role` 表示组织角色，禁止互相推导。
+- 新组织事件使用 `organization_changed`，必须携带 organization_id，移出时 membership_revoked=true；不复用历史上同时撤销平台访问的 principal_changed，避免错误保留旧平台授权或中断私人 Agent。
+- `organization.go` 实现创建、改名、退出、移交、解散与已有账号接受邀请；`registration.go` 支持显式开启的普通账号注册。所有组织写入在身份事务锁内重验权限。唯一 active owner 由部分唯一索引保障，仅移交操作可更换。
+- 退出/移出/解散仅撤销组织 Membership、Agent 发布和 Node 授权，不撤销平台 Membership 或浏览器 Session；重新加入必须接受新邀请，旧 Room/Node 授权不能复活。
+- SQLite 导入按独立组织与成员关系复制，保留历史状态及邀请，不再从平台 Membership 推导组织关系；Session/Node 仍不迁移。
+
 - 本仓唯一写入 User、密码凭据、浏览器 Session、Deployment、Organization、Membership、在线 Agent 身份与归属、订阅套餐及成员 entitlement；Deployment 是安装边界，Organization 是多人协作租户边界。
 - `nexus` 与 `nexus-relay` 只消费本仓签发的短期 Principal，不得读取 Control 数据库。
 - `nexus-control` 不依赖 `nexus-relay`；Agent 只保存公开身份、归属和发布状态，不保存本地配置、workspace、transcript 或产物。

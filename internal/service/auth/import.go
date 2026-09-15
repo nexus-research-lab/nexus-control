@@ -15,7 +15,7 @@ import (
 )
 
 // controlSQLiteImportSchemaVersion 随 Control 权威 schema 更新，防止旧迁移器静默丢字段。
-const controlSQLiteImportSchemaVersion = 9
+const controlSQLiteImportSchemaVersion = 10
 
 // ImportNexusSQLite 从停止写入的 Nexus SQLite 复制账号和密码哈希。
 // Session 故意不导入，切换后所有浏览器必须重新登录。
@@ -202,29 +202,17 @@ FROM deployments`).Scan(
 	}
 	deployment.CreatedAt = deployment.CreatedAt.UTC()
 	deployment.UpdatedAt = deployment.UpdatedAt.UTC()
-	var organizationCount int
-	if err := source.QueryRowContext(ctx, `SELECT COUNT(*) FROM organizations WHERE deployment_id = ?`, deployment.DeploymentID).Scan(&organizationCount); err != nil {
-		return store.ImportedDeploymentRecord{}, nil, nil, nil, nil, fmt.Errorf("读取源 Control Organization: %w", err)
+	if strings.TrimSpace(deployment.DeploymentID) == "" || strings.TrimSpace(deployment.Name) == "" || (deployment.Status != "active" && deployment.Status != "disabled") {
+		return store.ImportedDeploymentRecord{}, nil, nil, nil, nil, errors.New("源 Control Deployment 无效")
 	}
-	if organizationCount != 1 {
-		return store.ImportedDeploymentRecord{}, nil, nil, nil, nil, fmt.Errorf("源 Control 当前必须且只能包含一个 Organization，实际为 %d", organizationCount)
-	}
-	if err := source.QueryRowContext(ctx, `
-SELECT organization_id, name, status FROM organizations WHERE deployment_id = ?`, deployment.DeploymentID).Scan(
-		&deployment.OrganizationID,
-		&deployment.OrganizationName,
-		&deployment.OrganizationStatus,
-	); err != nil {
-		return store.ImportedDeploymentRecord{}, nil, nil, nil, nil, fmt.Errorf("读取源 Control Organization: %w", err)
-	}
-	if err := validateImportedControlDeployment(deployment); err != nil {
+	if err := scanControlOrganizations(ctx, source, &deployment); err != nil {
 		return store.ImportedDeploymentRecord{}, nil, nil, nil, nil, err
 	}
-	items, err := scanControlUsers(ctx, source, deployment.DeploymentID, deployment.OrganizationID)
+	items, err := scanControlUsers(ctx, source, deployment.DeploymentID)
 	if err != nil {
 		return store.ImportedDeploymentRecord{}, nil, nil, nil, nil, err
 	}
-	agents, err := scanControlAgents(ctx, source, deployment.DeploymentID, deployment.OrganizationID)
+	agents, err := scanControlAgents(ctx, source, deployment.DeploymentID)
 	if err != nil {
 		return store.ImportedDeploymentRecord{}, nil, nil, nil, nil, err
 	}
@@ -239,13 +227,13 @@ SELECT organization_id, name, status FROM organizations WHERE deployment_id = ?`
 	return deployment, items, agents, plans, entitlements, nil
 }
 
-func scanControlAgents(ctx context.Context, source *sql.Tx, deploymentID, organizationID string) ([]store.AgentRecord, error) {
+func scanControlAgents(ctx context.Context, source *sql.Tx, deploymentID string) ([]store.AgentRecord, error) {
 	rows, err := source.QueryContext(ctx, `
 SELECT agent_id, deployment_id, organization_id, owner_user_id, source_agent_id,
        name, avatar, status, created_at, updated_at
 FROM agents
-WHERE deployment_id = ? AND organization_id = ?
-ORDER BY agent_id`, deploymentID, organizationID)
+WHERE deployment_id = ?
+ORDER BY agent_id`, deploymentID)
 	if err != nil {
 		return nil, fmt.Errorf("读取源 Control Agent: %w", err)
 	}
@@ -265,32 +253,28 @@ func scanControlUsers(
 	ctx context.Context,
 	source *sql.Tx,
 	deploymentID string,
-	organizationID string,
 ) ([]store.ImportedUserRecord, error) {
-	var users, identities, credentials, memberships, organizationMemberships int
+	var users, identities, credentials, memberships int
 	if err := source.QueryRowContext(ctx, `
 SELECT
     (SELECT COUNT(*) FROM users),
     (SELECT COUNT(*) FROM identities),
     (SELECT COUNT(*) FROM password_credentials),
-    (SELECT COUNT(*) FROM deployment_memberships WHERE deployment_id = ?),
-    (SELECT COUNT(*) FROM organization_memberships WHERE organization_id = ?)`, deploymentID, organizationID).Scan(
+    (SELECT COUNT(*) FROM deployment_memberships WHERE deployment_id = ?)`, deploymentID).Scan(
 		&users,
 		&identities,
 		&credentials,
 		&memberships,
-		&organizationMemberships,
 	); err != nil {
 		return nil, fmt.Errorf("检查源 Control 账号: %w", err)
 	}
-	if users == 0 || identities != users || credentials != users || memberships != users || organizationMemberships != users {
+	if users == 0 || identities != users || credentials != users || memberships != users {
 		return nil, fmt.Errorf(
-			"源 Control 仅支持每个用户一组密码身份及当前 Deployment/Organization Membership：users=%d identities=%d credentials=%d memberships=%d organization_memberships=%d",
+			"源 Control 仅支持每个用户一组密码身份及当前 Deployment Membership：users=%d identities=%d credentials=%d memberships=%d",
 			users,
 			identities,
 			credentials,
 			memberships,
-			organizationMemberships,
 		)
 	}
 	rows, err := source.QueryContext(ctx, `
@@ -304,10 +288,8 @@ FROM users u
 JOIN identities i ON i.user_id = u.user_id
 JOIN password_credentials c ON c.user_id = u.user_id
 JOIN deployment_memberships m ON m.user_id = u.user_id
-JOIN organization_memberships om ON om.user_id = u.user_id
-WHERE m.deployment_id = ? AND om.organization_id = ?
-  AND om.role = m.role AND om.status = m.status
-ORDER BY u.created_at ASC, u.user_id ASC`, deploymentID, organizationID)
+WHERE m.deployment_id = ?
+ORDER BY u.created_at ASC, u.user_id ASC`, deploymentID)
 	if err != nil {
 		return nil, fmt.Errorf("读取源 Control 账号: %w", err)
 	}
@@ -458,23 +440,6 @@ ORDER BY user_id ASC`, deploymentID)
 		entitlements = append(entitlements, entitlement)
 	}
 	return entitlements, rows.Err()
-}
-
-func validateImportedControlDeployment(deployment store.ImportedDeploymentRecord) error {
-	if strings.TrimSpace(deployment.DeploymentID) == "" || strings.TrimSpace(deployment.Name) == "" ||
-		strings.TrimSpace(deployment.OrganizationID) == "" || strings.TrimSpace(deployment.OrganizationName) == "" {
-		return errors.New("源 Control Deployment 无效")
-	}
-	if len(deployment.Name) > 128 || len(deployment.OrganizationName) > 128 {
-		return errors.New("源 Control Deployment 或 Organization 名称过长")
-	}
-	if deployment.Status != "active" && deployment.Status != "disabled" {
-		return fmt.Errorf("源 Control Deployment 状态 %q 无效", deployment.Status)
-	}
-	if deployment.OrganizationStatus != "active" && deployment.OrganizationStatus != "disabled" {
-		return fmt.Errorf("源 Control Organization 状态 %q 无效", deployment.OrganizationStatus)
-	}
-	return nil
 }
 
 func validateImportedControlUser(item store.ImportedUserRecord, provider, subject string) error {

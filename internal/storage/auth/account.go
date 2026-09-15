@@ -183,13 +183,14 @@ SELECT
 	); err != nil {
 		return err
 	}
-	if _, err = tx.ExecContext(ctx,
-		`INSERT INTO organizations (organization_id, deployment_id, name, status, created_at, updated_at) VALUES (`+r.dialect.BindList(6)+`)`,
-		deployment.OrganizationID, deployment.DeploymentID,
-		deployment.OrganizationName, deployment.OrganizationStatus,
-		deployment.CreatedAt, deployment.UpdatedAt,
-	); err != nil {
-		return err
+	organizations := deployment.Organizations
+	if insertDefaults {
+		organizations = []ImportedOrganizationRecord{{ID: deployment.OrganizationID, Name: deployment.OrganizationName, Status: deployment.OrganizationStatus, CreatedAt: deployment.CreatedAt, UpdatedAt: deployment.UpdatedAt}}
+	}
+	for _, org := range organizations {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO organizations (organization_id,deployment_id,name,status,created_at,updated_at) VALUES (`+r.dialect.BindList(6)+`)`, org.ID, deployment.DeploymentID, org.Name, org.Status, org.CreatedAt, org.UpdatedAt); err != nil {
+			return err
+		}
 	}
 	if insertDefaults {
 		if err = r.insertDefaultSubscriptionPlans(ctx, tx, deployment.DeploymentID, deployment.CreatedAt); err != nil {
@@ -207,13 +208,23 @@ SELECT
 			return err
 		}
 	}
+	for _, membership := range deployment.OrganizationMemberships {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO organization_memberships (organization_id,user_id,role,status,created_at,updated_at) VALUES (`+r.dialect.BindList(6)+`)`, membership.OrganizationID, membership.UserID, membership.Role, membership.Status, membership.CreatedAt, membership.UpdatedAt); err != nil {
+			return err
+		}
+	}
+	for _, invitation := range deployment.Invitations {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO organization_invitations (invitation_id,organization_id,token_hash,role,created_by_user_id,accepted_by_user_id,expires_at,accepted_at,revoked_at,created_at,updated_at) VALUES (`+r.dialect.BindList(11)+`)`, invitation.InvitationID, invitation.OrganizationID, invitation.TokenHash, invitation.Role, invitation.CreatedByUserID, nullableString(invitation.AcceptedByUserID), invitation.ExpiresAt, nullableTime(invitation.AcceptedAt), nullableTime(invitation.RevokedAt), invitation.CreatedAt, invitation.UpdatedAt); err != nil {
+			return err
+		}
+	}
 	for _, agent := range agents {
 		if _, err = tx.ExecContext(ctx, `
 INSERT INTO agents
     (agent_id, deployment_id, organization_id, owner_user_id, source_agent_id,
      name, avatar, status, created_at, updated_at)
 VALUES (`+r.dialect.BindList(10)+`)`,
-			agent.AgentID, deployment.DeploymentID, deployment.OrganizationID,
+			agent.AgentID, deployment.DeploymentID, agent.OrganizationID,
 			agent.OwnerUserID, agent.SourceAgentID, agent.Name, nullableString(agent.Avatar),
 			agent.Status, agent.CreatedAt, agent.UpdatedAt,
 		); err != nil {
@@ -388,9 +399,23 @@ func (r *Repository) importUser(ctx context.Context, tx *sql.Tx, deploymentID, o
 	); err != nil {
 		return err
 	}
+	if organizationID == "" {
+		return nil
+	}
+	// 旧单体允许多个平台 owner，迁入默认组织时仅保留首位组织 owner。
+	role := item.Role
+	if role == "owner" && membershipStatus == "active" {
+		var owners int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM organization_memberships WHERE organization_id=`+r.bind(1)+` AND role='owner' AND status='active'`, organizationID).Scan(&owners); err != nil {
+			return err
+		}
+		if owners > 0 {
+			role = "admin"
+		}
+	}
 	_, err := tx.ExecContext(ctx,
 		`INSERT INTO organization_memberships (organization_id, user_id, role, status, created_at, updated_at) VALUES (`+r.dialect.BindList(6)+`)`,
-		organizationID, user.UserID, item.Role, membershipStatus, membershipCreated, membershipUpdated,
+		organizationID, user.UserID, role, membershipStatus, membershipCreated, membershipUpdated,
 	)
 	return err
 }

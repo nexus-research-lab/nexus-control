@@ -243,7 +243,9 @@ func (s *HTTPServer) writeWebStatus(w http.ResponseWriter, r *http.Request, prin
 		return
 	}
 	payload := map[string]any{
-		"auth_required": true, "password_login_enabled": state.PasswordLoginEnabled,
+		"registration_enabled": state.RegistrationEnabled,
+		"organization_role":    nil,
+		"auth_required":        true, "password_login_enabled": state.PasswordLoginEnabled,
 		"authenticated": principal != nil, "setup_required": state.SetupRequired,
 		"setup_enabled": state.SetupEnabled,
 		"username":      nil, "user_id": nil, "display_name": nil,
@@ -251,6 +253,7 @@ func (s *HTTPServer) writeWebStatus(w http.ResponseWriter, r *http.Request, prin
 		"organization_id": nil, "organization_name": nil,
 	}
 	if principal != nil {
+		payload["organization_role"] = principal.OrganizationRole
 		payload["username"] = principal.Username
 		payload["user_id"] = principal.UserID
 		payload["display_name"] = principal.DisplayName

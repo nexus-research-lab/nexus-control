@@ -64,7 +64,7 @@ func runControlConformance(t *testing.T, cfg config.Config) {
 		t.Fatalf("有效邀请不能删除: %v", err)
 	}
 	admin := *owner
-	admin.Role = RoleAdmin
+	admin.OrganizationRole = RoleAdmin
 	if err := service.DeleteOrganizationInvitation(ctx, admin, invitation.InvitationID); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("管理员不能删除管理员邀请: %v", err)
 	}
@@ -137,7 +137,7 @@ func runControlConformance(t *testing.T, cfg config.Config) {
 		t.Fatalf("updated member = %+v, err = %v", member, err)
 	}
 	events, err := service.ListIdentityInvalidations(ctx, 0, 10)
-	if err != nil || len(events) != 1 || events[0].UserID != member.UserID || events[0].Reason != "principal_changed" {
+	if err != nil || len(events) != 1 || events[0].UserID != member.UserID || events[0].Reason != "organization_changed" {
 		t.Fatalf("identity invalidations = %+v, err = %v", events, err)
 	}
 	if cursor, cursorErr := service.LatestIdentityInvalidationID(ctx); cursorErr != nil || cursor != events[0].EventID {

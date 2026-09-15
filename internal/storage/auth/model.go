@@ -27,6 +27,7 @@ type UserRecord struct {
 }
 
 type PrincipalRecord struct {
+	OrganizationRole string
 	DeploymentID     string
 	OrganizationID   string
 	OrganizationName string
@@ -209,15 +210,28 @@ type ImportedUserRecord struct {
 }
 
 type ImportedDeploymentRecord struct {
-	Invalidations      []IdentityInvalidationRecord
-	DeploymentID       string
-	Name               string
-	Status             string
-	OrganizationID     string
-	OrganizationName   string
-	OrganizationStatus string
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
+	Organizations           []ImportedOrganizationRecord
+	OrganizationMemberships []ImportedOrganizationMembership
+	Invitations             []OrganizationInvitationRecord
+	Invalidations           []IdentityInvalidationRecord
+	DeploymentID            string
+	Name                    string
+	Status                  string
+	OrganizationID          string
+	OrganizationName        string
+	OrganizationStatus      string
+	CreatedAt               time.Time
+	UpdatedAt               time.Time
+}
+
+type ImportedOrganizationRecord struct {
+	ID, Name, Status     string
+	CreatedAt, UpdatedAt time.Time
+}
+
+type ImportedOrganizationMembership struct {
+	OrganizationID, UserID, Role, Status string
+	CreatedAt, UpdatedAt                 time.Time
 }
 
 type ImportedEntitlementRecord struct {

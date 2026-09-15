@@ -56,7 +56,8 @@ func LoadSigner(encodedPrivateKey, privateKeyPath, publicKeyPath string) (*Signe
 
 func (s *Signer) Sign(principal Principal, audience string, now time.Time, ttl time.Duration) (string, error) {
 	claims := PrincipalClaims{
-		NodeID: principal.NodeID, ParentSessionID: principal.ParentSessionID, AgentIDs: principal.AgentIDs,
+		OrganizationRole: principal.OrganizationRole,
+		NodeID:           principal.NodeID, ParentSessionID: principal.ParentSessionID, AgentIDs: principal.AgentIDs,
 		Version: 1, Issuer: "nexus-control", Audience: audience,
 		IssuedAt: now.Unix(), ExpiresAt: now.Add(ttl).Unix(),
 		DeploymentID: principal.DeploymentID, UserID: principal.UserID,

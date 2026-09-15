@@ -20,14 +20,14 @@ func (s *Service) CreateOrganizationInvitation(
 	actor Principal,
 	input CreateOrganizationInvitationInput,
 ) (*CreatedOrganizationInvitation, error) {
-	if actor.Role != RoleOwner && actor.Role != RoleAdmin {
+	if actor.OrganizationRole != RoleOwner && actor.OrganizationRole != RoleAdmin {
 		return nil, ErrForbidden
 	}
 	role, err := normalizeRole(input.Role)
 	if err != nil || role == RoleOwner {
 		return nil, ErrRequestInvalid
 	}
-	if actor.Role == RoleAdmin && role != RoleMember {
+	if actor.OrganizationRole == RoleAdmin && role != RoleMember {
 		return nil, ErrForbidden
 	}
 	hours := input.ExpiresInHours
@@ -49,14 +49,14 @@ func (s *Service) CreateOrganizationInvitation(
 		CreatedAt: now, UpdatedAt: now,
 	})
 	if err != nil {
-		return nil, err
+		return nil, organizationError(err)
 	}
 	return &CreatedOrganizationInvitation{OrganizationInvitation: invitationFromRecord(*record), Token: token}, nil
 }
 
 // ListOrganizationInvitations 返回当前组织最近的邀请审计记录。
 func (s *Service) ListOrganizationInvitations(ctx context.Context, actor Principal) ([]OrganizationInvitation, error) {
-	if actor.Role != RoleOwner && actor.Role != RoleAdmin {
+	if actor.OrganizationRole != RoleOwner && actor.OrganizationRole != RoleAdmin {
 		return nil, ErrForbidden
 	}
 	records, err := s.repository.ListOrganizationInvitations(ctx, actor.OrganizationID)
@@ -81,14 +81,14 @@ func (s *Service) DeleteOrganizationInvitation(ctx context.Context, actor Princi
 }
 
 func (s *Service) mutateOrganizationInvitation(ctx context.Context, actor Principal, invitationID string, remove bool) error {
-	if actor.Role != RoleOwner && actor.Role != RoleAdmin {
+	if actor.OrganizationRole != RoleOwner && actor.OrganizationRole != RoleAdmin {
 		return ErrForbidden
 	}
 	invitationID = strings.TrimSpace(invitationID)
 	if invitationID == "" || len(invitationID) > 128 {
 		return ErrRequestInvalid
 	}
-	if actor.Role == RoleAdmin {
+	if actor.OrganizationRole == RoleAdmin {
 		record, err := s.repository.OrganizationInvitationByID(ctx, actor.OrganizationID, invitationID)
 		if errors.Is(err, store.ErrInvitationInvalid) {
 			return ErrInvitationInvalid
@@ -104,11 +104,11 @@ func (s *Service) mutateOrganizationInvitation(ctx context.Context, actor Princi
 	if remove {
 		mutate = s.repository.DeleteOrganizationInvitation
 	}
-	if err := mutate(ctx, actor.OrganizationID, invitationID, s.now()); err != nil {
+	if err := mutate(ctx, actor.OrganizationID, invitationID, actor.UserID, s.now()); err != nil {
 		if errors.Is(err, store.ErrInvitationInvalid) {
 			return ErrInvitationInvalid
 		}
-		return err
+		return organizationError(err)
 	}
 	return nil
 }

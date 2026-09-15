@@ -1,4 +1,5 @@
 // Package auth 实现账号、会话、部署成员、entitlement 与持久失效序列的业务规则。
-// 成员管理支持显示名称、角色、状态与 expected_version；访问撤销沿用 Session 与 Principal 失效链路。
+// organization.go 管理账号独立的组织生命周期；组织权限与平台角色分离，移出组织不撤销登录。
+// import_organization.go 保留多组织、历史成员关系与邀请；import.go 复制独立平台账号。
 // node.go 提供设备授权、租户隔离的精确回执与独立 Node 令牌交换。
 package auth

@@ -5,6 +5,7 @@
 // 成员清单：
 //   - repository.go / model.go：Repository、方言辅助与持久化记录。
 //   - account.go：Control 状态、owner、用户资料与旧 Nexus 导入事务。
+//   - organization.go / registration.go：事务内实时权限、组织生命周期与独立账号注册。
 //   - session.go：登录凭据、Session 创建、解析、触达和撤销。
 //   - node.go：浏览器绑定的设备授权、凭据哈希、精确回执与撤销事务。
 //   - member.go / identity_invalidation.go：组织成员事务与按提交顺序可消费的身份失效序列；身份写入先锁 Control 状态再锁业务行。

@@ -10,14 +10,14 @@ import (
 func (r *Repository) LoginRecord(ctx context.Context, username string) (*LoginRecord, error) {
 	row := r.db.QueryRowContext(ctx, `
 SELECT u.user_id, u.username, u.display_name, u.avatar, u.status,
-       c.password_hash, m.deployment_id, om.role, m.status, o.organization_id, o.name
+       c.password_hash, m.deployment_id, m.role, m.status, COALESCE(o.organization_id, ''), COALESCE(o.name, ''), COALESCE(om.role, '')
 FROM users u
 JOIN password_credentials c ON c.user_id = u.user_id
 JOIN deployment_memberships m ON m.user_id = u.user_id
 JOIN deployments d ON d.deployment_id = m.deployment_id
-JOIN organization_memberships om ON om.user_id = u.user_id AND om.status = 'active'
-JOIN organizations o ON o.organization_id = om.organization_id AND o.deployment_id = m.deployment_id
-WHERE u.username = `+r.bind(1)+` AND d.status = 'active' AND o.status = 'active'
+LEFT JOIN organization_memberships om ON om.user_id = u.user_id AND om.status = 'active'
+LEFT JOIN organizations o ON o.organization_id = om.organization_id AND o.deployment_id = m.deployment_id AND o.status = 'active'
+WHERE u.username = `+r.bind(1)+` AND d.status = 'active'
 ORDER BY m.created_at ASC LIMIT 1`, username)
 	var record LoginRecord
 	var avatar sql.NullString
@@ -26,6 +26,7 @@ ORDER BY m.created_at ASC LIMIT 1`, username)
 		&avatar, &record.UserStatus, &record.PasswordHash, &record.Principal.DeploymentID,
 		&record.Principal.Role, &record.MembershipState,
 		&record.Principal.OrganizationID, &record.Principal.OrganizationName,
+		&record.Principal.OrganizationRole,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -121,15 +122,15 @@ func (r *Repository) ResolveSessionByID(ctx context.Context, sessionID string, n
 func (r *Repository) resolveSession(ctx context.Context, predicate string, argument any, now time.Time) (*PrincipalRecord, error) {
 	query := `
 SELECT s.session_id, s.deployment_id, s.user_id, s.auth_method,
-       u.username, u.display_name, u.avatar, om.role, o.organization_id, o.name
+       u.username, u.display_name, u.avatar, m.role, COALESCE(o.organization_id, ''), COALESCE(o.name, ''), COALESCE(om.role, '')
 FROM sessions s
 JOIN users u ON u.user_id = s.user_id
 JOIN deployment_memberships m ON m.deployment_id = s.deployment_id AND m.user_id = s.user_id
 JOIN deployments d ON d.deployment_id = s.deployment_id
-JOIN organization_memberships om ON om.user_id = s.user_id AND om.status = 'active'
-JOIN organizations o ON o.organization_id = om.organization_id AND o.deployment_id = s.deployment_id
+LEFT JOIN organization_memberships om ON om.user_id = s.user_id AND om.status = 'active'
+LEFT JOIN organizations o ON o.organization_id = om.organization_id AND o.deployment_id = s.deployment_id AND o.status = 'active'
 WHERE ` + predicate + ` AND s.revoked_at IS NULL AND s.expires_at > ` + r.bind(2) + `
-  AND d.status = 'active' AND o.status = 'active' AND u.status = 'active' AND m.status = 'active'
+  AND d.status = 'active' AND u.status = 'active' AND m.status = 'active'
 LIMIT 1`
 	var principal PrincipalRecord
 	var avatar sql.NullString
@@ -137,6 +138,7 @@ LIMIT 1`
 		&principal.SessionID, &principal.DeploymentID, &principal.UserID, &principal.AuthMethod,
 		&principal.Username, &principal.DisplayName, &avatar, &principal.Role,
 		&principal.OrganizationID, &principal.OrganizationName,
+		&principal.OrganizationRole,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil

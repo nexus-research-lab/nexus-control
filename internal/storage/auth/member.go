@@ -73,12 +73,15 @@ WHERE m.deployment_id = `+r.bind(1)+` AND om.organization_id = `+r.bind(2)+`
 	return &member, err
 }
 
-func (r *Repository) CreateMember(ctx context.Context, record NewMemberRecord) (*DeploymentMemberRecord, error) {
-	tx, err := r.db.BeginTx(ctx, nil)
+func (r *Repository) CreateMember(ctx context.Context, actorUserID string, record NewMemberRecord) (*DeploymentMemberRecord, error) {
+	tx, err := r.beginIdentityWrite(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
+	if err = r.requireOrganizationManager(ctx, tx, record.OrganizationID, actorUserID, record.Role); err != nil {
+		return nil, err
+	}
 	if err = r.lockDeployment(ctx, tx, record.DeploymentID); err != nil {
 		return nil, err
 	}
@@ -100,7 +103,7 @@ VALUES (`+r.dialect.BindList(6)+`) ON CONFLICT(username) DO NOTHING`,
 	}{
 		{`INSERT INTO identities (identity_id, user_id, provider, subject, created_at, updated_at) VALUES (` + r.dialect.BindList(6) + `)`, []any{record.IdentityID, record.UserID, "password", record.Username, now, now}},
 		{`INSERT INTO password_credentials (credential_id, user_id, password_hash, password_algo, password_updated_at, created_at, updated_at) VALUES (` + r.dialect.BindList(7) + `)`, []any{record.CredentialID, record.UserID, record.PasswordHash, "argon2id", now, now, now}},
-		{`INSERT INTO deployment_memberships (deployment_id, user_id, role, status, created_at, updated_at) VALUES (` + r.dialect.BindList(6) + `)`, []any{record.DeploymentID, record.UserID, record.Role, "active", now, now}},
+		{`INSERT INTO deployment_memberships (deployment_id, user_id, role, status, created_at, updated_at) VALUES (` + r.dialect.BindList(6) + `)`, []any{record.DeploymentID, record.UserID, "member", "active", now, now}},
 		{`INSERT INTO organization_memberships (organization_id, user_id, role, status, created_at, updated_at) VALUES (` + r.dialect.BindList(6) + `)`, []any{record.OrganizationID, record.UserID, record.Role, "active", now, now}},
 	}
 	for _, statement := range statements {
@@ -123,6 +126,7 @@ func (r *Repository) UpdateMember(
 	deploymentID string,
 	organizationID string,
 	userID string,
+	actorUserID string,
 	expectedRole string,
 	expectedStatus string,
 	expectedVersion int64,
@@ -146,24 +150,17 @@ func (r *Repository) UpdateMember(
 	if target.Role != expectedRole || target.MembershipStatus != expectedStatus || target.UpdatedAt.UnixMicro() != expectedVersion {
 		return nil, ErrStateConflict
 	}
-	if target.Role == "owner" && target.MembershipStatus == "active" &&
-		(nextRole != "owner" || nextStatus != "active") {
-		var owners int
-		if err = tx.QueryRowContext(ctx, `
-SELECT COUNT(*) FROM organization_memberships
-WHERE organization_id = `+r.bind(1)+` AND role = 'owner' AND status = 'active'`, organizationID).Scan(&owners); err != nil {
-			return nil, err
-		}
-		if owners <= 1 {
-			return nil, ErrLastOwner
-		}
+	if target.MembershipStatus != "active" {
+		return nil, ErrStateConflict
 	}
-	if _, err = tx.ExecContext(ctx, `
-UPDATE deployment_memberships SET role = `+r.bind(1)+`, status = `+r.bind(2)+`, updated_at = `+r.bind(3)+`
-WHERE deployment_id = `+r.bind(4)+` AND user_id = `+r.bind(5),
-		nextRole, nextStatus, now, deploymentID, userID,
-	); err != nil {
+	if err = r.requireOrganizationManager(ctx, tx, organizationID, actorUserID, target.Role); err != nil {
 		return nil, err
+	}
+	if err = r.requireOrganizationManager(ctx, tx, organizationID, actorUserID, nextRole); err != nil {
+		return nil, err
+	}
+	if actorUserID == userID && nextStatus == "revoked" {
+		return nil, ErrStateConflict
 	}
 	organizationResult, err := tx.ExecContext(ctx, `
 UPDATE organization_memberships SET role = `+r.bind(1)+`, status = `+r.bind(2)+`, updated_at = `+r.bind(3)+`
@@ -188,18 +185,14 @@ WHERE user_id = `+r.bind(4)+` AND organization_id = `+r.bind(5),
 		}
 	}
 	if nextStatus == "revoked" {
-		if _, err = tx.ExecContext(ctx, `
-UPDATE sessions SET revoked_at = `+r.bind(1)+`, updated_at = `+r.bind(2)+`
-WHERE deployment_id = `+r.bind(3)+` AND user_id = `+r.bind(4)+` AND revoked_at IS NULL`,
-			now, now, deploymentID, userID,
-		); err != nil {
+		if err = r.revokeOrganizationMember(ctx, tx, deploymentID, organizationID, userID, now); err != nil {
 			return nil, err
 		}
 	}
-	if target.Role != nextRole || target.MembershipStatus != nextStatus {
+	if nextStatus != "revoked" && (target.Role != nextRole || target.MembershipStatus != nextStatus) {
 		if _, err = tx.ExecContext(ctx, `INSERT INTO identity_invalidations
 			(deployment_id, user_id, reason, created_at, organization_id, membership_revoked)
-			VALUES (`+r.dialect.BindList(6)+`)`, deploymentID, userID, "principal_changed", now, organizationID, nextStatus != "active"); err != nil {
+			VALUES (`+r.dialect.BindList(6)+`)`, deploymentID, userID, "organization_changed", now, organizationID, nextStatus != "active"); err != nil {
 			return nil, err
 		}
 	}
