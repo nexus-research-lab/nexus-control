@@ -64,6 +64,7 @@ func (s *HTTPServer) mount() {
 	s.router.HandleFunc("GET "+webBase+"/organization/invitations", s.webListOrganizationInvitations)
 	s.router.HandleFunc("POST "+webBase+"/organization/invitations", s.webCreateOrganizationInvitation)
 	s.router.HandleFunc("DELETE "+webBase+"/organization/invitations/{invitation_id}", s.webRevokeOrganizationInvitation)
+	s.router.HandleFunc("DELETE "+webBase+"/organization/invitations/{invitation_id}/record", s.webDeleteOrganizationInvitation)
 	s.router.HandleFunc("GET "+webBase+"/organization-invitations/{token}", s.webPreviewOrganizationInvitation)
 	s.router.HandleFunc("POST "+webBase+"/organization-invitations/{token}/accept", s.webAcceptOrganizationInvitation)
 	s.router.HandleFunc("GET "+webBase+"/subscription/overview", s.webSubscriptionOverview)

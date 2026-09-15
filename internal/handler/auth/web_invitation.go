@@ -42,6 +42,14 @@ func (s *HTTPServer) webCreateOrganizationInvitation(w http.ResponseWriter, r *h
 }
 
 func (s *HTTPServer) webRevokeOrganizationInvitation(w http.ResponseWriter, r *http.Request) {
+	s.webMutateOrganizationInvitation(w, r, false)
+}
+
+func (s *HTTPServer) webDeleteOrganizationInvitation(w http.ResponseWriter, r *http.Request) {
+	s.webMutateOrganizationInvitation(w, r, true)
+}
+
+func (s *HTTPServer) webMutateOrganizationInvitation(w http.ResponseWriter, r *http.Request, remove bool) {
 	if !s.requireWebMutationOrigin(w, r) {
 		return
 	}
@@ -49,13 +57,17 @@ func (s *HTTPServer) webRevokeOrganizationInvitation(w http.ResponseWriter, r *h
 	if !ok {
 		return
 	}
-	if err := s.service.RevokeOrganizationInvitation(
+	mutate, resultKey := s.service.RevokeOrganizationInvitation, "revoked"
+	if remove {
+		mutate, resultKey = s.service.DeleteOrganizationInvitation, "deleted"
+	}
+	if err := mutate(
 		r.Context(), *principal, r.PathValue("invitation_id"),
 	); err != nil {
 		s.writeServiceError(w, r, err)
 		return
 	}
-	s.writeData(w, r, map[string]bool{"revoked": true})
+	s.writeData(w, r, map[string]bool{resultKey: true})
 }
 
 func (s *HTTPServer) webPreviewOrganizationInvitation(w http.ResponseWriter, r *http.Request) {

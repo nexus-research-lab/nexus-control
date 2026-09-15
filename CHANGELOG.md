@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Allow organization owners and administrators to delete terminal invitation records without changing memberships.
+
 ## [0.1.1] - 2026-09-10
 
 ### 新增

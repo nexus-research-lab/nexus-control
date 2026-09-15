@@ -263,6 +263,21 @@ paths:
         "200": {$ref: "#/components/responses/Success"}
         "403": {$ref: "#/components/responses/Error"}
         "404": {$ref: "#/components/responses/Error"}
+  /auth/v1/organization/invitations/{invitation_id}/record:
+    delete:
+      operationId: deleteOrganizationInvitation
+      description: Delete accepted, revoked or expired invitation records only. Does not change organization membership. Owners may delete all records; admins may delete member-role records only.
+      security:
+        - CookieSession: []
+      parameters:
+        - name: invitation_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "403": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
   /auth/v1/organization-invitations/{token}:
     get:
       operationId: previewOrganizationInvitation

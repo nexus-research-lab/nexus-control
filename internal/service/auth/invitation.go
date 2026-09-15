@@ -72,6 +72,15 @@ func (s *Service) ListOrganizationInvitations(ctx context.Context, actor Princip
 
 // RevokeOrganizationInvitation 撤销尚未使用的邀请。
 func (s *Service) RevokeOrganizationInvitation(ctx context.Context, actor Principal, invitationID string) error {
+	return s.mutateOrganizationInvitation(ctx, actor, invitationID, false)
+}
+
+// DeleteOrganizationInvitation 只清理终态邀请，不变更已加入的成员。
+func (s *Service) DeleteOrganizationInvitation(ctx context.Context, actor Principal, invitationID string) error {
+	return s.mutateOrganizationInvitation(ctx, actor, invitationID, true)
+}
+
+func (s *Service) mutateOrganizationInvitation(ctx context.Context, actor Principal, invitationID string, remove bool) error {
 	if actor.Role != RoleOwner && actor.Role != RoleAdmin {
 		return ErrForbidden
 	}
@@ -91,7 +100,11 @@ func (s *Service) RevokeOrganizationInvitation(ctx context.Context, actor Princi
 			return ErrForbidden
 		}
 	}
-	if err := s.repository.RevokeOrganizationInvitation(ctx, actor.OrganizationID, invitationID, s.now()); err != nil {
+	mutate := s.repository.RevokeOrganizationInvitation
+	if remove {
+		mutate = s.repository.DeleteOrganizationInvitation
+	}
+	if err := mutate(ctx, actor.OrganizationID, invitationID, s.now()); err != nil {
 		if errors.Is(err, store.ErrInvitationInvalid) {
 			return ErrInvitationInvalid
 		}

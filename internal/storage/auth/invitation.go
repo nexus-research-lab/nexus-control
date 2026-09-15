@@ -94,6 +94,26 @@ WHERE organization_id = `+r.bind(3)+` AND invitation_id = `+r.bind(4)+`
 	return nil
 }
 
+// DeleteOrganizationInvitation 在同一语句中限定租户和终态，避免先查后删的竞态。
+func (r *Repository) DeleteOrganizationInvitation(ctx context.Context, organizationID, invitationID string, now time.Time) error {
+	result, err := r.db.ExecContext(ctx, `
+DELETE FROM organization_invitations
+WHERE organization_id = `+r.bind(1)+` AND invitation_id = `+r.bind(2)+`
+  AND (accepted_at IS NOT NULL OR revoked_at IS NOT NULL OR expires_at <= `+r.bind(3)+`)`,
+		organizationID, invitationID, now)
+	if err != nil {
+		return err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count != 1 {
+		return ErrInvitationInvalid
+	}
+	return nil
+}
+
 func (r *Repository) AcceptOrganizationInvitation(
 	ctx context.Context,
 	input AcceptOrganizationInvitationRecord,

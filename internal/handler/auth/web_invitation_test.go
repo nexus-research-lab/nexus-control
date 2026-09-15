@@ -61,6 +61,16 @@ func TestOrganizationInvitationLifecycle(t *testing.T) {
 		t.Fatalf("create status = %d, data = %+v", created.StatusCode, createdPayload.Data)
 	}
 	token := createdPayload.Data.Token
+	deleteRecord := func(client *http.Client, id, origin string, want int) {
+		t.Helper()
+		response := doWebJSON(t, client, http.MethodDelete,
+			server.URL+"/auth/v1/organization/invitations/"+id+"/record", origin, nil, "")
+		response.Body.Close()
+		if response.StatusCode != want {
+			t.Fatalf("delete invitation status = %d, want %d", response.StatusCode, want)
+		}
+	}
+	deleteRecord(owner, createdPayload.Data.InvitationID, server.URL, http.StatusNotFound)
 	preview, err := http.Get(server.URL + "/auth/v1/organization-invitations/" + token)
 	if err != nil {
 		t.Fatal(err)
@@ -133,6 +143,15 @@ func TestOrganizationInvitationLifecycle(t *testing.T) {
 	revokedPreview.Body.Close()
 	if revokedPreview.StatusCode != http.StatusNotFound {
 		t.Fatalf("revoked preview status = %d", revokedPreview.StatusCode)
+	}
+	deleteRecord(member, createdPayload.Data.InvitationID, server.URL, http.StatusForbidden)
+	deleteRecord(owner, createdPayload.Data.InvitationID, "https://untrusted.example", http.StatusForbidden)
+	deleteRecord(owner, createdPayload.Data.InvitationID, server.URL, http.StatusOK)
+	deleteRecord(owner, createdPayload.Data.InvitationID, server.URL, http.StatusNotFound)
+	deleteRecord(owner, revocablePayload.Data.InvitationID, server.URL, http.StatusOK)
+	var memberCount int
+	if err := database.QueryRowContext(ctx, "SELECT COUNT(*) FROM organization_memberships WHERE organization_id = ?", acceptedPayload.Data.OrganizationID).Scan(&memberCount); err != nil || memberCount != 2 {
+		t.Fatalf("删除邀请不得影响组织成员: count=%d err=%v", memberCount, err)
 	}
 }
 

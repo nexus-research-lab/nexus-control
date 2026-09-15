@@ -56,6 +56,29 @@ func runControlConformance(t *testing.T, cfg config.Config) {
 		owner.OrganizationName != "Nexus" || owner.UserID == "" {
 		t.Fatalf("owner = %+v", owner)
 	}
+	invitation, err := service.CreateOrganizationInvitation(ctx, *owner, CreateOrganizationInvitationInput{Role: RoleAdmin, ExpiresInHours: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.DeleteOrganizationInvitation(ctx, *owner, invitation.InvitationID); !errors.Is(err, ErrInvitationInvalid) {
+		t.Fatalf("有效邀请不能删除: %v", err)
+	}
+	admin := *owner
+	admin.Role = RoleAdmin
+	if err := service.DeleteOrganizationInvitation(ctx, admin, invitation.InvitationID); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("管理员不能删除管理员邀请: %v", err)
+	}
+	otherOrganization := *owner
+	otherOrganization.OrganizationID = "other-org"
+	if err := service.DeleteOrganizationInvitation(ctx, otherOrganization, invitation.InvitationID); !errors.Is(err, ErrInvitationInvalid) {
+		t.Fatalf("不能跨组织删除: %v", err)
+	}
+	clock := service.now
+	service.now = func() time.Time { return invitation.ExpiresAt.Add(time.Second) }
+	if err := service.DeleteOrganizationInvitation(ctx, *owner, invitation.InvitationID); err != nil {
+		t.Fatalf("过期邀请应可删除: %v", err)
+	}
+	service.now = clock
 	if _, err = service.Login(ctx, LoginInput{Username: "admin", Password: "wrong-password"}); !errors.Is(err, ErrInvalidCredentials) {
 		t.Fatalf("wrong password err = %v", err)
 	}
