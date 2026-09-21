@@ -27,17 +27,18 @@ type UserRecord struct {
 }
 
 type PrincipalRecord struct {
-	OrganizationRole string
-	DeploymentID     string
-	OrganizationID   string
-	OrganizationName string
-	UserID           string
-	Username         string
-	DisplayName      string
-	Role             string
-	Avatar           string
-	AuthMethod       string
-	SessionID        string
+	WebAccessDisabled bool
+	OrganizationRole  string
+	DeploymentID      string
+	OrganizationID    string
+	OrganizationName  string
+	UserID            string
+	Username          string
+	DisplayName       string
+	Role              string
+	Avatar            string
+	AuthMethod        string
+	SessionID         string
 }
 
 type SubscriptionPlanRecord struct {
@@ -193,6 +194,7 @@ type LoginRecord struct {
 }
 
 type ImportedUserRecord struct {
+	WebAccessDisabled bool
 	User              UserRecord
 	Role              string
 	MembershipStatus  string

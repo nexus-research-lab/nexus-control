@@ -153,7 +153,7 @@ paths:
   /auth/v1/status:
     get:
       operationId: webAuthStatus
-      description: role 为平台角色，organization_role 为组织角色，二者不可互相替代。无组织的有效账号仍 authenticated=true；registration_enabled 表示是否开放普通账号注册。
+      description: role 为平台角色，organization_role 为组织角色，二者不可互相替代。无组织的有效账号仍 authenticated=true；registration_enabled 表示是否开放普通账号注册。web_access_disabled=true 表示不具备 Nexus 服务器网页版工作台资格，仍可使用桌面 App 和组织协作。
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -449,7 +449,7 @@ paths:
   /auth/v1/organization-invitations/{token}/accept:
     post:
       operationId: acceptOrganizationInvitation
-      description: 同源 Origin。未登录提交账号资料注册加入；已登录提交空对象并加入，必须当前无组织，不重设账号密码。邀请单次消费。
+      description: 同源 Origin。未登录提交账号资料注册加入，账号 web_access_disabled=true；已登录提交空对象并加入，必须当前无组织，不重设密码或改变网页版资格。邀请单次消费。
       parameters:
         - {$ref: "#/components/parameters/InvitationToken"}
       requestBody:
@@ -596,6 +596,7 @@ paths:
   /api/control/v1/internal/principals/exchange:
     post:
       operationId: exchangePrincipal
+      description: 签名 Principal 携带独立的 web_access_disabled 资格；下游工作台必须执行此门禁，不能从组织角色推导网页资格。
       x-internal: true
       security:
         - ServiceToken: []

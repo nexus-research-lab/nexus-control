@@ -197,45 +197,47 @@ type OrganizationInvitationPreview struct {
 
 // Principal 是 Control 签发给下游服务的短期身份事实。
 type Principal struct {
-	OrganizationRole string      `json:"organization_role"`
-	NodeID           string      `json:"node_id,omitempty"`
-	ParentSessionID  string      `json:"parent_session_id,omitempty"`
-	AgentIDs         []string    `json:"agent_ids,omitempty"`
-	DeploymentID     string      `json:"deployment_id"`
-	OrganizationID   string      `json:"organization_id"`
-	OrganizationName string      `json:"organization_name"`
-	UserID           string      `json:"user_id"`
-	Username         string      `json:"username"`
-	DisplayName      string      `json:"display_name,omitempty"`
-	Role             string      `json:"role"`
-	Avatar           string      `json:"avatar,omitempty"`
-	AuthMethod       string      `json:"auth_method"`
-	SessionID        string      `json:"session_id"`
-	Entitlement      Entitlement `json:"entitlement"`
+	WebAccessDisabled bool        `json:"web_access_disabled"`
+	OrganizationRole  string      `json:"organization_role"`
+	NodeID            string      `json:"node_id,omitempty"`
+	ParentSessionID   string      `json:"parent_session_id,omitempty"`
+	AgentIDs          []string    `json:"agent_ids,omitempty"`
+	DeploymentID      string      `json:"deployment_id"`
+	OrganizationID    string      `json:"organization_id"`
+	OrganizationName  string      `json:"organization_name"`
+	UserID            string      `json:"user_id"`
+	Username          string      `json:"username"`
+	DisplayName       string      `json:"display_name,omitempty"`
+	Role              string      `json:"role"`
+	Avatar            string      `json:"avatar,omitempty"`
+	AuthMethod        string      `json:"auth_method"`
+	SessionID         string      `json:"session_id"`
+	Entitlement       Entitlement `json:"entitlement"`
 }
 
 // PrincipalClaims 是签名 token 的稳定 v1 claim。
 type PrincipalClaims struct {
-	OrganizationRole string      `json:"organization_role"`
-	NodeID           string      `json:"node_id,omitempty"`
-	ParentSessionID  string      `json:"parent_session_id,omitempty"`
-	AgentIDs         []string    `json:"agent_ids,omitempty"`
-	Version          int         `json:"v"`
-	Issuer           string      `json:"iss"`
-	Audience         string      `json:"aud"`
-	IssuedAt         int64       `json:"iat"`
-	ExpiresAt        int64       `json:"exp"`
-	DeploymentID     string      `json:"deployment_id"`
-	OrganizationID   string      `json:"organization_id"`
-	OrganizationName string      `json:"organization_name"`
-	UserID           string      `json:"user_id"`
-	Username         string      `json:"username"`
-	DisplayName      string      `json:"display_name,omitempty"`
-	Role             string      `json:"role"`
-	Avatar           string      `json:"avatar,omitempty"`
-	AuthMethod       string      `json:"auth_method"`
-	SessionID        string      `json:"session_id"`
-	Entitlement      Entitlement `json:"entitlement"`
+	WebAccessDisabled bool        `json:"web_access_disabled"`
+	OrganizationRole  string      `json:"organization_role"`
+	NodeID            string      `json:"node_id,omitempty"`
+	ParentSessionID   string      `json:"parent_session_id,omitempty"`
+	AgentIDs          []string    `json:"agent_ids,omitempty"`
+	Version           int         `json:"v"`
+	Issuer            string      `json:"iss"`
+	Audience          string      `json:"aud"`
+	IssuedAt          int64       `json:"iat"`
+	ExpiresAt         int64       `json:"exp"`
+	DeploymentID      string      `json:"deployment_id"`
+	OrganizationID    string      `json:"organization_id"`
+	OrganizationName  string      `json:"organization_name"`
+	UserID            string      `json:"user_id"`
+	Username          string      `json:"username"`
+	DisplayName       string      `json:"display_name,omitempty"`
+	Role              string      `json:"role"`
+	Avatar            string      `json:"avatar,omitempty"`
+	AuthMethod        string      `json:"auth_method"`
+	SessionID         string      `json:"session_id"`
+	Entitlement       Entitlement `json:"entitlement"`
 }
 
 // State 描述 Control 是否完成首次设置。

@@ -394,8 +394,8 @@ func (r *Repository) importUser(ctx context.Context, tx *sql.Tx, deploymentID, o
 		membershipUpdated = user.UpdatedAt
 	}
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO deployment_memberships (deployment_id, user_id, role, status, created_at, updated_at) VALUES (`+r.dialect.BindList(6)+`)`,
-		deploymentID, user.UserID, item.Role, membershipStatus, membershipCreated, membershipUpdated,
+		`INSERT INTO deployment_memberships (deployment_id, user_id, role, status, created_at, updated_at, web_access_disabled) VALUES (`+r.dialect.BindList(7)+`)`,
+		deploymentID, user.UserID, item.Role, membershipStatus, membershipCreated, membershipUpdated, item.WebAccessDisabled,
 	); err != nil {
 		return err
 	}

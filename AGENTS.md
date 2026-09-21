@@ -23,6 +23,8 @@
 - 组织撤权事件同时携带 `organization_id` 与 `membership_revoked`，供 Relay 同事务撤销 Room 真人/Agent 成员与执行资格；Agent 目录、归属校验和发布都要求其所有者当前仍有有效组织与部署访问。SQLite→PostgreSQL 导入必须保留失效事件原 ID 并推进目标序列，不能令已有 Relay 游标越过后续撤权。
 - Control 不接收 Nexus token 用量，也不保存公共 Provider 或项目 ACL；前者是 Nexus 本地执行事实，后两者是 Nexus 运行资源。
 
+- 部署 Membership 的 `web_access_disabled` 独立于组织角色。Session、签名 Principal 和导入保持此字段，Nexus 宿主执行网页版工作台门禁；组织变更不得改变该资格。
+
 ## 目录
 
 - `cmd/nexus-control/`：进程入口，以及 Nexus SQLite 导入和 Control SQLite 到 PostgreSQL 的一次性迁移命令。

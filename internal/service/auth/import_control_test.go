@@ -45,6 +45,9 @@ func TestImportControlSQLitePreservesAuthority(t *testing.T) {
 		t.Fatal(err)
 	}
 	limit := int64(8192)
+	if _, err = sourceDatabase.Exec(`UPDATE deployment_memberships SET web_access_disabled = TRUE WHERE user_id = ?`, member.UserID); err != nil {
+		t.Fatal(err)
+	}
 	if _, err = sourceService.UpsertSubscriptionPlan(ctx, *owner, UpsertSubscriptionPlanInput{
 		PlanKey: "team", DisplayName: "Team", Status: PlanStatusActive,
 		MonthlyTokenLimit: &limit, Notes: "团队套餐", SortOrder: 20,
@@ -217,7 +220,7 @@ func readAuthorityRows(t *testing.T, database *sql.DB) map[string][][]string {
 		"users":                    `SELECT user_id, username, display_name, status, avatar, last_login_at, created_at, updated_at FROM users ORDER BY user_id`,
 		"identities":               `SELECT identity_id, user_id, provider, subject, created_at, updated_at FROM identities ORDER BY identity_id`,
 		"credentials":              `SELECT credential_id, user_id, password_hash, password_algo, password_updated_at, created_at, updated_at FROM password_credentials ORDER BY credential_id`,
-		"memberships":              `SELECT deployment_id, user_id, role, status, created_at, updated_at FROM deployment_memberships ORDER BY deployment_id, user_id`,
+		"memberships":              `SELECT deployment_id, user_id, role, status, web_access_disabled, created_at, updated_at FROM deployment_memberships ORDER BY deployment_id, user_id`,
 		"agents":                   `SELECT agent_id, deployment_id, organization_id, owner_user_id, source_agent_id, name, avatar, status, created_at, updated_at FROM agents ORDER BY agent_id`,
 		"plans":                    `SELECT deployment_id, plan_key, display_name, status, monthly_token_limit, notes, sort_order, created_at, updated_at FROM subscription_plans ORDER BY deployment_id, plan_key`,
 		"entitlements":             `SELECT deployment_id, user_id, plan_key, created_at, updated_at FROM member_entitlements ORDER BY deployment_id, user_id`,

@@ -4,8 +4,80 @@ import (
 	"encoding/base64"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	controldb "github.com/nexus-research-lab/nexus-control/db"
 )
+
+func TestInvitationRegistrationKeepsDesktopAccessWithoutWebAccess(t *testing.T) {
+	ctx := t.Context()
+	database, s := newImportTestService(t, filepath.Join(t.TempDir(), "control.db"))
+	owner, err := s.SetupOwner(ctx, SetupOwnerInput{Username: "admin", Password: "password-123"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	invite, err := s.CreateOrganizationInvitation(ctx, *owner, CreateOrganizationInvitationInput{Role: RoleAdmin})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.AcceptOrganizationInvitation(ctx, AcceptOrganizationInvitationInput{Token: invite.Token, Username: "invited", Password: "password-123"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	login, err := s.Login(ctx, LoginInput{Username: "invited", Password: "password-123"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !login.Principal.WebAccessDisabled {
+		t.Fatal("组织管理员身份不能授予网页版资格")
+	}
+	for _, audience := range []string{"nexus-runtime", relayUserAudience} {
+		token, _, err := s.ExchangePrincipal(ctx, login.SessionToken, audience)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !verifyTestPrincipal(t, s.signer, token).WebAccessDisabled {
+			t.Fatal("签名身份必须保留网页限制")
+		}
+	}
+	agent, err := s.PublishAgent(ctx, login.Principal, PublishAgentInput{SourceAgentID: "local", Name: "Agent"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	credential := base64.RawURLEncoding.EncodeToString(make([]byte, 32))
+	if _, err = s.RegisterNode(ctx, login.Principal, RegisterNodeInput{NodeID: "desktop", Name: "Desktop", Credential: credential, AgentIDs: []string{agent.AgentID}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.ExchangeNodeToken(ctx, credential); err != nil {
+		t.Fatalf("受限账号仍应能使用桌面执行节点: %v", err)
+	}
+	// 模拟升级前没有资格列的库，验证历史注册来源回填。
+	if _, err = database.Exec(`ALTER TABLE deployment_memberships DROP COLUMN web_access_disabled`); err != nil {
+		t.Fatal(err)
+	}
+	migration, err := controldb.Migrations.ReadFile("migrations/sqlite/00011_web_access.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = database.Exec(strings.Split(string(migration), "-- +goose Down")[0]); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.DeleteOrganizationInvitation(ctx, *owner, invite.InvitationID); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.MutateOrganization(ctx, login.Principal, "leave", OrganizationInput{}); err != nil {
+		t.Fatal(err)
+	}
+	principal, err := s.ResolveSession(ctx, login.SessionToken)
+	if err != nil || principal == nil || !principal.WebAccessDisabled {
+		t.Fatalf("删除邀请和离组不能获得网页资格: %+v %v", principal, err)
+	}
+	ownerLogin, err := s.Login(ctx, LoginInput{Username: "admin", Password: "password-123"})
+	if err != nil || ownerLogin.Principal.WebAccessDisabled {
+		t.Fatalf("原有账号不应降权: %v", err)
+	}
+}
 
 // TestOrganizationLifecycle 验证账号独立、邀请加入、所有权移交和旧设备不可复活。
 func TestOrganizationLifecycle(t *testing.T) {
@@ -71,6 +143,9 @@ func TestOrganizationLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	b := resolve(bob.SessionToken)
+	if b.WebAccessDisabled {
+		t.Fatal("已有账号加入组织不应丢失网页资格")
+	}
 	if _, err = s.ListMembers(ctx, b); err != nil {
 		t.Fatal(err)
 	}

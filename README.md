@@ -4,7 +4,7 @@ Nexus Control 是 Nexus 的账号、组织、部署与服务额度权威。它�
 
 当前支持单 Deployment 下多个 Organization，以及 SQLite、PostgreSQL 两种数据库；每个账号最多一个 active Organization，也可以无组织。成员目录只返回当前 Organization，Principal 的 role 是平台角色、organization_role 是组织角色，二者独立。受信 Nexus Gateway 在建群前通过 Control internal API 批量校验真人成员归属。Relay 的 Room/Message、Agent 执行和 OAuth 不在本仓实现。
 
-Node 授权使用 `/auth/v1/nodes` 注册、列出（最近 100 条）与撤销；注册必须有浏览器 Cookie、同源 Origin，以及明确选择的本人 Agent ID（1–32 个）。宿主生成并安全保存 32 字节随机 base64url 凭据，Control 仅保存 SHA-256 哈希；相同 Node ID、凭据和完整范围可以重放，不能覆盖或复活已撤销授权。`POST /auth/v1/nodes/token` 仅接受该独立凭据的 Bearer header，返回 60 秒 `nexus-relay-node` Principal，不使用浏览器 Cookie或服务 token。令牌绑定父 Session，登出后不能继续换取；节点撤销与父 Session 撤销均通过持久身份事件通知 Relay。当前是授权后端，Nexus 设备启用界面和 runtime 消费器尚未接入。
+Node 授权使用 `/auth/v1/nodes` 注册、列出（最近 100 条）与撤销；注册必须有浏览器 Cookie、同源 Origin，以及明确选择的本人 Agent ID（1–32 个）。宿主生成并安全保存 32 字节随机 base64url 凭据，Control 仅保存 SHA-256 哈希；相同 Node ID、凭据和完整范围可以重放，不能覆盖或复活已撤销授权。`POST /auth/v1/nodes/token` 仅接受该独立凭据的 Bearer header，返回 15 分钟 `nexus-relay-node` Principal，不使用浏览器 Cookie 或服务 token。设备续期独立于浏览器 Session 自然到期；主动登出、改密、组织撤权或设备撤销仍会使设备失效。Nexus 宿主负责本机设备登记与 Room runtime 执行，Control 只提供身份和授权。
 
 ## 启动
 

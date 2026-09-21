@@ -10,7 +10,7 @@ import (
 func (r *Repository) LoginRecord(ctx context.Context, username string) (*LoginRecord, error) {
 	row := r.db.QueryRowContext(ctx, `
 SELECT u.user_id, u.username, u.display_name, u.avatar, u.status,
-       c.password_hash, m.deployment_id, m.role, m.status, COALESCE(o.organization_id, ''), COALESCE(o.name, ''), COALESCE(om.role, '')
+       c.password_hash, m.deployment_id, m.role, m.status, COALESCE(o.organization_id, ''), COALESCE(o.name, ''), COALESCE(om.role, ''), m.web_access_disabled
 FROM users u
 JOIN password_credentials c ON c.user_id = u.user_id
 JOIN deployment_memberships m ON m.user_id = u.user_id
@@ -27,6 +27,7 @@ ORDER BY m.created_at ASC LIMIT 1`, username)
 		&record.Principal.Role, &record.MembershipState,
 		&record.Principal.OrganizationID, &record.Principal.OrganizationName,
 		&record.Principal.OrganizationRole,
+		&record.Principal.WebAccessDisabled,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -131,7 +132,7 @@ func (r *Repository) ResolveNodeOwner(ctx context.Context, node NodeRecord) (*Pr
 func (r *Repository) resolveSession(ctx context.Context, predicate string, arguments ...any) (*PrincipalRecord, error) {
 	query := `
 SELECT s.session_id, s.deployment_id, s.user_id, s.auth_method,
-       u.username, u.display_name, u.avatar, m.role, COALESCE(o.organization_id, ''), COALESCE(o.name, ''), COALESCE(om.role, '')
+       u.username, u.display_name, u.avatar, m.role, COALESCE(o.organization_id, ''), COALESCE(o.name, ''), COALESCE(om.role, ''), m.web_access_disabled
 FROM sessions s
 JOIN users u ON u.user_id = s.user_id
 JOIN deployment_memberships m ON m.deployment_id = s.deployment_id AND m.user_id = s.user_id
@@ -148,6 +149,7 @@ LIMIT 1`
 		&principal.Username, &principal.DisplayName, &avatar, &principal.Role,
 		&principal.OrganizationID, &principal.OrganizationName,
 		&principal.OrganizationRole,
+		&principal.WebAccessDisabled,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil

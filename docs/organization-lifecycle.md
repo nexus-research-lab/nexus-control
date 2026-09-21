@@ -14,6 +14,8 @@ User 独立于 Organization 存在。Deployment membership 的 role 是平台角
 
 ## 页面与接口
 
+组织成员资格与网页版工作台访问资格独立。登录成功不代表可以访问所有产品能力，客户端按服务端返回的资格展示可用入口；组织角色变更不改变网页版资格。
+
 App/Web 都使用「设置 → 账户 → 组织」。本地身份仅显示远程登录引导；无组织显示创建入口和邀请链接说明；有组织显示目录及本角色允许的操作。创建/改名/退出/移交/解散调用同源 `/auth/v1/organization/{action}`；移交提交 target_user_id，创建/改名提交 name，其他提交空对象。已有账号接受邀请复用 `/organization-invitations/{token}/accept`，不提交密码。所有 mutation 要求同源 Origin。
 
 ## 数据与发布

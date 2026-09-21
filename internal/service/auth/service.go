@@ -295,33 +295,35 @@ func (s *Service) PublicKey() string { return s.signer.PublicKey() }
 
 func principalFromRecord(record store.PrincipalRecord) Principal {
 	return Principal{
-		OrganizationRole: record.OrganizationRole,
-		DeploymentID:     record.DeploymentID,
-		OrganizationID:   record.OrganizationID,
-		OrganizationName: record.OrganizationName,
-		UserID:           record.UserID,
-		Username:         record.Username,
-		DisplayName:      record.DisplayName,
-		Role:             record.Role,
-		Avatar:           record.Avatar,
-		AuthMethod:       record.AuthMethod,
-		SessionID:        record.SessionID,
+		WebAccessDisabled: record.WebAccessDisabled,
+		OrganizationRole:  record.OrganizationRole,
+		DeploymentID:      record.DeploymentID,
+		OrganizationID:    record.OrganizationID,
+		OrganizationName:  record.OrganizationName,
+		UserID:            record.UserID,
+		Username:          record.Username,
+		DisplayName:       record.DisplayName,
+		Role:              record.Role,
+		Avatar:            record.Avatar,
+		AuthMethod:        record.AuthMethod,
+		SessionID:         record.SessionID,
 	}
 }
 
 func principalRecord(principal Principal) store.PrincipalRecord {
 	return store.PrincipalRecord{
-		OrganizationRole: principal.OrganizationRole,
-		DeploymentID:     principal.DeploymentID,
-		OrganizationID:   principal.OrganizationID,
-		OrganizationName: principal.OrganizationName,
-		UserID:           principal.UserID,
-		Username:         principal.Username,
-		DisplayName:      principal.DisplayName,
-		Role:             principal.Role,
-		Avatar:           principal.Avatar,
-		AuthMethod:       principal.AuthMethod,
-		SessionID:        principal.SessionID,
+		WebAccessDisabled: principal.WebAccessDisabled,
+		OrganizationRole:  principal.OrganizationRole,
+		DeploymentID:      principal.DeploymentID,
+		OrganizationID:    principal.OrganizationID,
+		OrganizationName:  principal.OrganizationName,
+		UserID:            principal.UserID,
+		Username:          principal.Username,
+		DisplayName:       principal.DisplayName,
+		Role:              principal.Role,
+		Avatar:            principal.Avatar,
+		AuthMethod:        principal.AuthMethod,
+		SessionID:         principal.SessionID,
 	}
 }
 

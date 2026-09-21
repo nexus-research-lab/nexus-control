@@ -194,7 +194,7 @@ VALUES (`+r.dialect.BindList(6)+`) ON CONFLICT(username) DO NOTHING`,
 	}{
 		{`INSERT INTO identities (identity_id, user_id, provider, subject, created_at, updated_at) VALUES (` + r.dialect.BindList(6) + `)`, []any{input.IdentityID, input.UserID, "password", input.Username, input.AcceptedAt, input.AcceptedAt}},
 		{`INSERT INTO password_credentials (credential_id, user_id, password_hash, password_algo, password_updated_at, created_at, updated_at) VALUES (` + r.dialect.BindList(7) + `)`, []any{input.CredentialID, input.UserID, input.PasswordHash, "argon2id", input.AcceptedAt, input.AcceptedAt, input.AcceptedAt}},
-		{`INSERT INTO deployment_memberships (deployment_id, user_id, role, status, created_at, updated_at) VALUES (` + r.dialect.BindList(6) + `)`, []any{invitation.DeploymentID, input.UserID, "member", "active", input.AcceptedAt, input.AcceptedAt}},
+		{`INSERT INTO deployment_memberships (deployment_id, user_id, role, status, created_at, updated_at, web_access_disabled) VALUES (` + r.dialect.BindList(7) + `)`, []any{invitation.DeploymentID, input.UserID, "member", "active", input.AcceptedAt, input.AcceptedAt, true}},
 		{`INSERT INTO organization_memberships (organization_id, user_id, role, status, created_at, updated_at) VALUES (` + r.dialect.BindList(6) + `)`, []any{invitation.OrganizationID, input.UserID, invitation.Role, "active", input.AcceptedAt, input.AcceptedAt}},
 	}
 	for _, statement := range statements {

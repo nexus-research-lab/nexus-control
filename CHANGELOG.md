@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Correct device-token lifetime and host integration documentation.
+
+- Separate hosted web access eligibility from organization membership.
+
 ## [0.1.2] - 2026-09-21
 
 ### Added

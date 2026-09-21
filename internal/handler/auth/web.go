@@ -253,6 +253,7 @@ func (s *HTTPServer) writeWebStatus(w http.ResponseWriter, r *http.Request, prin
 		"organization_id": nil, "organization_name": nil,
 	}
 	if principal != nil {
+		payload["web_access_disabled"] = principal.WebAccessDisabled
 		payload["organization_role"] = principal.OrganizationRole
 		payload["username"] = principal.Username
 		payload["user_id"] = principal.UserID

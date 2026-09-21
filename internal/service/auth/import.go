@@ -15,7 +15,7 @@ import (
 )
 
 // controlSQLiteImportSchemaVersion 随 Control 权威 schema 更新，防止旧迁移器静默丢字段。
-const controlSQLiteImportSchemaVersion = 10
+const controlSQLiteImportSchemaVersion = 11
 
 // ImportNexusSQLite 从停止写入的 Nexus SQLite 复制账号和密码哈希。
 // Session 故意不导入，切换后所有浏览器必须重新登录。
@@ -283,7 +283,7 @@ SELECT u.user_id, u.username, u.display_name, u.status, u.avatar,
        i.identity_id, i.provider, i.subject, i.created_at, i.updated_at,
        c.credential_id, c.password_hash, c.password_algo,
        c.password_updated_at, c.created_at, c.updated_at,
-       m.role, m.status, m.created_at, m.updated_at
+       m.role, m.status, m.created_at, m.updated_at, m.web_access_disabled
 FROM users u
 JOIN identities i ON i.user_id = u.user_id
 JOIN password_credentials c ON c.user_id = u.user_id
@@ -324,6 +324,7 @@ ORDER BY u.created_at ASC, u.user_id ASC`, deploymentID)
 			&item.MembershipStatus,
 			&item.MembershipCreated,
 			&item.MembershipUpdated,
+			&item.WebAccessDisabled,
 		); err != nil {
 			return nil, err
 		}
