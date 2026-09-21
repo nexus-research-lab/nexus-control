@@ -45,7 +45,8 @@ func (r *Repository) CreateSession(ctx context.Context, record SessionRecord) er
 	}
 	defer tx.Rollback()
 	if _, err = tx.ExecContext(ctx,
-		`DELETE FROM sessions WHERE expires_at <= `+r.bind(1)+` OR revoked_at IS NOT NULL`,
+		`DELETE FROM sessions WHERE (expires_at <= `+r.bind(1)+` OR revoked_at IS NOT NULL)
+ AND NOT EXISTS (SELECT 1 FROM execution_nodes n WHERE n.parent_session_id = sessions.session_id AND n.revoked_at IS NULL)`,
 		record.CreatedAt,
 	); err != nil {
 		return err
@@ -112,14 +113,22 @@ RETURNING deployment_id, user_id, session_id`, now, now, tokenHash).Scan(
 }
 
 func (r *Repository) ResolveSessionByTokenHash(ctx context.Context, tokenHash string, now time.Time) (*PrincipalRecord, error) {
-	return r.resolveSession(ctx, "s.session_token_hash = "+r.bind(1), tokenHash, now)
+	return r.resolveSession(ctx, "s.session_token_hash = "+r.bind(1)+" AND s.expires_at > "+r.bind(2), tokenHash, now)
 }
 
 func (r *Repository) ResolveSessionByID(ctx context.Context, sessionID string, now time.Time) (*PrincipalRecord, error) {
-	return r.resolveSession(ctx, "s.session_id = "+r.bind(1), sessionID, now)
+	return r.resolveSession(ctx, "s.session_id = "+r.bind(1)+" AND s.expires_at > "+r.bind(2), sessionID, now)
 }
 
-func (r *Repository) resolveSession(ctx context.Context, predicate string, argument any, now time.Time) (*PrincipalRecord, error) {
+// ResolveNodeOwner 保留注册来源的撤销栅栏，但设备续签不延长也不依赖浏览器会话有效期。
+func (r *Repository) ResolveNodeOwner(ctx context.Context, node NodeRecord) (*PrincipalRecord, error) {
+	return r.resolveSession(ctx, `s.session_id = `+r.bind(1)+` AND EXISTS (
+ SELECT 1 FROM execution_nodes n WHERE n.node_id = `+r.bind(2)+`
+ AND n.parent_session_id = s.session_id AND n.owner_user_id = s.user_id
+ AND n.deployment_id = s.deployment_id AND n.revoked_at IS NULL)`, node.ParentSessionID, node.NodeID)
+}
+
+func (r *Repository) resolveSession(ctx context.Context, predicate string, arguments ...any) (*PrincipalRecord, error) {
 	query := `
 SELECT s.session_id, s.deployment_id, s.user_id, s.auth_method,
        u.username, u.display_name, u.avatar, m.role, COALESCE(o.organization_id, ''), COALESCE(o.name, ''), COALESCE(om.role, '')
@@ -129,12 +138,12 @@ JOIN deployment_memberships m ON m.deployment_id = s.deployment_id AND m.user_id
 JOIN deployments d ON d.deployment_id = s.deployment_id
 LEFT JOIN organization_memberships om ON om.user_id = s.user_id AND om.status = 'active'
 LEFT JOIN organizations o ON o.organization_id = om.organization_id AND o.deployment_id = s.deployment_id AND o.status = 'active'
-WHERE ` + predicate + ` AND s.revoked_at IS NULL AND s.expires_at > ` + r.bind(2) + `
+WHERE ` + predicate + ` AND s.revoked_at IS NULL
   AND d.status = 'active' AND u.status = 'active' AND m.status = 'active'
 LIMIT 1`
 	var principal PrincipalRecord
 	var avatar sql.NullString
-	err := r.db.QueryRowContext(ctx, query, argument, now).Scan(
+	err := r.db.QueryRowContext(ctx, query, arguments...).Scan(
 		&principal.SessionID, &principal.DeploymentID, &principal.UserID, &principal.AuthMethod,
 		&principal.Username, &principal.DisplayName, &avatar, &principal.Role,
 		&principal.OrganizationID, &principal.OrganizationName,

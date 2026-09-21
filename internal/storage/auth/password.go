@@ -38,7 +38,7 @@ func (r *Repository) TryCommitPasswordChange(
 	nextHash string,
 	now time.Time,
 ) (PasswordAttempt, error) {
-	tx, err := r.db.BeginTx(ctx, nil)
+	tx, err := r.beginIdentityWrite(ctx)
 	if err != nil {
 		return PasswordAttemptCredentialChanged, err
 	}
@@ -63,6 +63,9 @@ WHERE user_id = `+r.bind(4)+` AND password_hash = `+r.bind(5), nextHash, now, no
 	}
 	if changed, _ := result.RowsAffected(); changed != 1 {
 		return PasswordAttemptCredentialChanged, nil
+	}
+	if err = r.revokeUserNodes(ctx, tx, userID, now); err != nil {
+		return PasswordAttemptCredentialChanged, err
 	}
 	if err = tx.Commit(); err != nil {
 		return PasswordAttemptCredentialChanged, err

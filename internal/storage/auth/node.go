@@ -90,6 +90,35 @@ func (r *Repository) NodeByCredential(ctx context.Context, hash string) (NodeRec
 	return scanNode(r.db.QueryRowContext(ctx, `SELECT `+nodeColumns+` FROM execution_nodes WHERE credential_hash = `+r.bind(1)+` AND revoked_at IS NULL`, hash))
 }
 
+// 改密属于安全失效，必须持久撤销设备，不能只让已有短令牌到期。
+func (r *Repository) revokeUserNodes(ctx context.Context, tx *sql.Tx, userID string, now time.Time) error {
+	rows, err := tx.QueryContext(ctx, `UPDATE execution_nodes SET revoked_at=`+r.bind(1)+` WHERE owner_user_id=`+r.bind(2)+` AND revoked_at IS NULL RETURNING deployment_id,node_id`, now, userID)
+	if err != nil {
+		return err
+	}
+	type revokedNode struct{ deployment, id string }
+	var nodes []revokedNode
+	for rows.Next() {
+		var node revokedNode
+		if err = rows.Scan(&node.deployment, &node.id); err != nil {
+			rows.Close()
+			return err
+		}
+		nodes = append(nodes, node)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	for _, node := range nodes {
+		if err = r.appendIdentityInvalidation(ctx, tx, node.deployment, userID, "node:"+node.id, "session_revoked", now); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (r *Repository) ListNodes(ctx context.Context, deploymentID, organizationID, ownerID string) ([]NodeRecord, error) {
 	rows, err := r.db.QueryContext(ctx, `SELECT `+nodeColumns+` FROM execution_nodes WHERE deployment_id = `+r.bind(1)+` AND organization_id = `+r.bind(2)+` AND owner_user_id = `+r.bind(3)+` ORDER BY created_at DESC LIMIT 100`, deploymentID, organizationID, ownerID)
 	if err != nil {

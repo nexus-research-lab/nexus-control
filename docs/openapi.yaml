@@ -113,7 +113,7 @@ paths:
     post:
       operationId: exchangeExecutionNodeToken
       security: [{NodeCredential: []}]
-      description: 不使用 Cookie。返回 data.token、expires_at 和已校验归属的 agents；令牌固定 nexus-relay-node audience、60 秒期限和签名 Agent 范围。父 Session 失效或 Agent 不再属于本人时拒绝。
+      description: 不使用 Cookie。返回 data.token、expires_at 和已校验归属的 agents；令牌固定 nexus-relay-node audience、15 分钟期限和签名 Agent 范围。浏览器自然到期不影响设备续签，父 Session 主动撤销、设备撤销、改密或 Agent 不再属于本人时拒绝。
       responses:
         "200": {$ref: "#/components/responses/Success"}
         "401": {$ref: "#/components/responses/Error"}

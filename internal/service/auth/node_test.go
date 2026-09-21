@@ -7,10 +7,11 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestNodeGrantScopeReplayAndRevocation(t *testing.T) {
-	_, service := newImportTestService(t, filepath.Join(t.TempDir(), "control.db"))
+	db, service := newImportTestService(t, filepath.Join(t.TempDir(), "control.db"))
 	ctx := context.Background()
 	owner, err := service.SetupOwner(ctx, SetupOwnerInput{Username: "owner", Password: "password-123"})
 	if err != nil {
@@ -53,6 +54,9 @@ func TestNodeGrantScopeReplayAndRevocation(t *testing.T) {
 		t.Fatal(err)
 	}
 	claims := verifyTestPrincipal(t, service.signer, issued.Token)
+	if claims.ExpiresAt-claims.IssuedAt != int64(nodeTokenTTL/time.Second) {
+		t.Fatal("unexpected node token lifetime")
+	}
 	if claims.Audience != "nexus-relay-node" || claims.Role != "node" || claims.NodeID != input.NodeID || claims.SessionID != "node:device" || claims.ParentSessionID != login.Principal.SessionID || len(claims.AgentIDs) != 1 || claims.AgentIDs[0] != agent.AgentID {
 		t.Fatalf("unbound grant: %+v", claims)
 	}
@@ -112,10 +116,38 @@ func TestNodeGrantScopeReplayAndRevocation(t *testing.T) {
 	if _, err = service.RegisterNode(ctx, login.Principal, input); err != nil {
 		t.Fatal(err)
 	}
+	// 浏览器自然过期不能切断设备授权，也不能让旧 Cookie 重新访问真人 API。
+	if _, err = db.Exec(`UPDATE sessions SET expires_at=? WHERE session_id=?`, service.now().UTC().Add(-time.Hour), login.Principal.SessionID); err != nil {
+		t.Fatal(err)
+	}
+	if actor, err := service.ResolveSession(ctx, login.SessionToken); err != nil || actor != nil {
+		t.Fatalf("expired browser session revived: %+v %v", actor, err)
+	}
+	renewedLogin, err := service.Login(ctx, LoginInput{Username: "owner", Password: "password-123"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = service.ExchangeNodeToken(ctx, input.Credential); err != nil {
+		t.Fatalf("session cleanup broke device renewal: %v", err)
+	}
 	if err = service.Logout(ctx, login.SessionToken); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = service.ExchangeNodeToken(ctx, input.Credential); err == nil {
 		t.Fatal("logged-out parent still grants execution")
+	}
+	input.NodeID, input.Credential = "after-login", base64.RawURLEncoding.EncodeToString([]byte("34567890123456789012345678901234"))
+	if _, err = service.RegisterNode(ctx, renewedLogin.Principal, input); err != nil {
+		t.Fatal(err)
+	}
+	hash, _, err := service.repository.PasswordCredential(ctx, owner.UserID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = service.repository.TryCommitPasswordChange(ctx, owner.UserID, "password-reset", hash, "changed", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = service.ExchangeNodeToken(ctx, input.Credential); !errors.Is(err, ErrUnauthenticated) {
+		t.Fatalf("password change retained device: %v", err)
 	}
 }

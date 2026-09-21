@@ -16,6 +16,8 @@ import (
 
 const relayNodeAudience = "nexus-relay-node"
 
+const nodeTokenTTL = 15 * time.Minute
+
 // ExecutionNode 是用户可查看和撤销的设备执行授权；凭据从不回显。
 type ExecutionNode struct {
 	NodeID    string     `json:"node_id"`
@@ -124,10 +126,14 @@ func (s *Service) ExchangeNodeToken(ctx context.Context, credential string) (Nod
 	if err != nil {
 		return NodeTokenResult{}, err
 	}
-	actor, err := s.VerifyBoundHuman(ctx, node.OwnerUserID, node.ParentSessionID)
+	record, err := s.repository.ResolveNodeOwner(ctx, node)
 	if err != nil {
 		return NodeTokenResult{}, err
 	}
+	if record == nil {
+		return NodeTokenResult{}, ErrUnauthenticated
+	}
+	actor := principalFromRecord(*record)
 	if actor.DeploymentID != node.DeploymentID || actor.OrganizationID != node.OrganizationID {
 		return NodeTokenResult{}, ErrForbidden
 	}
@@ -137,6 +143,6 @@ func (s *Service) ExchangeNodeToken(ctx context.Context, credential string) (Nod
 	}
 	actor.ParentSessionID, actor.SessionID, actor.NodeID = actor.SessionID, "node:"+node.NodeID, node.NodeID
 	actor.Role, actor.AuthMethod, actor.AgentIDs = "node", "node", node.AgentIDs
-	token, err := s.signer.Sign(*actor, relayNodeAudience, now, time.Minute)
-	return NodeTokenResult{Token: token, ExpiresAt: now.Add(time.Minute), Agents: agents}, err
+	token, err := s.signer.Sign(actor, relayNodeAudience, now, nodeTokenTTL)
+	return NodeTokenResult{Token: token, ExpiresAt: now.Add(nodeTokenTTL), Agents: agents}, err
 }

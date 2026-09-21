@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Keep device token renewal independent of browser session expiry, preserve device-bound authorization records during login cleanup, issue 15-minute scoped Node tokens, and revoke devices transactionally on password changes.
+
 - Separate platform and organization roles; allow organization-less accounts, optional public registration, existing-account invitation acceptance, organization creation/rename/leave/ownership transfer/dissolution.
 - Keep account sessions and deployment access on organization removal; revoke Agent publication and device authorization permanently, and serialize invitation authorization with identity changes.
 - Enforce one active organization owner in SQLite/PostgreSQL and preserve multiple organizations, historical memberships and invitations during Control SQLite import.
