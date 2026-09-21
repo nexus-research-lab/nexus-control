@@ -2,25 +2,22 @@
 
 ## [Unreleased]
 
-- Keep device token renewal independent of browser session expiry, preserve device-bound authorization records during login cleanup, issue 15-minute scoped Node tokens, and revoke devices transactionally on password changes.
+## [0.1.2] - 2026-09-21
 
-- Separate platform and organization roles; allow organization-less accounts, optional public registration, existing-account invitation acceptance, organization creation/rename/leave/ownership transfer/dissolution.
-- Keep account sessions and deployment access on organization removal; revoke Agent publication and device authorization permanently, and serialize invitation authorization with identity changes.
-- Enforce one active organization owner in SQLite/PostgreSQL and preserve multiple organizations, historical memberships and invitations during Control SQLite import.
+### Added
 
-- Allow organization owners and administrators to delete terminal invitation records without changing memberships.
+- Added independent organization lifecycle, optional public registration, existing-account invitations, ownership transfer, and terminal invitation cleanup.
+- Added published Agent identities and scoped execution-node registration, revocation, and exact receipt recovery.
 
-### 新增
+### Changed
 
-- 增加按部署、组织和所有者隔离的精确 Node 授权查询，供宿主恢复丢失的注册/撤销回执，不返回设备凭据。
-- 取消未确认设备授权时保留不可复活的终止记录，支持先撤销后注册的到达顺序，防止用户取消后迟到注册重新获得能力。
+- Separated platform and organization roles; organization removal preserves account access while permanently revoking affected Agent and device grants.
+- Issued 15-minute scoped Node tokens and kept device renewal independent of browser-session expiry, while retaining logout, password-change, and membership revocation.
 
-- 增加限定 Agent 范围、绑定浏览器 Session 的 Node 注册与撤销；独立设备凭据只换取 60 秒 Relay Node 令牌，不能替代真人身份。SQLite/PostgreSQL 同步增加节点授权表。
+### Fixed
 
-- 组织撤权事件携带明确组织与撤权事实，Agent 目录和发布统一检查真人所有者资格；Control SQLite 导入保留失效事件原游标及 PostgreSQL 序列，避免 Relay 漏消费。
-- 身份变更事务统一提交顺序，防止 PostgreSQL 并发写入时失效游标越过尚未提交的撤权事件。
-
-- 增加组织内在线 Agent 身份发布、归属校验与 SQLite/PostgreSQL 持久化；Control 快照迁移同步保留 Agent 权威数据。
+- Serialized identity changes and invalidation events to prevent missed revocations under concurrent PostgreSQL writes.
+- Enforced one active organization owner and preserved organization history, Agent identities, and invalidation cursors during database import.
 
 ## [0.1.1] - 2026-09-10
 
