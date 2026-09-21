@@ -2,9 +2,16 @@
 
 ## [Unreleased]
 
-- Correct device-token lifetime and host integration documentation.
+## [0.1.3] - 2026-09-21
 
-- Separate hosted web access eligibility from organization membership.
+### Added
+
+- Separated hosted-web access eligibility from organization membership, preserving the flag across sessions, signed principals, and data imports.
+- Kept accounts created through organization invitations App-only without downgrading existing accounts that later join an organization.
+
+### Changed
+
+- Corrected device-token lifetime and host integration documentation.
 
 ## [0.1.2] - 2026-09-21
 
