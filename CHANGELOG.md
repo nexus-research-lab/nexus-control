@@ -2,7 +2,11 @@
 
 ## [Unreleased]
 
-- Node 换票可按 ID 查询当前组织的公开 Agent 身份，保持机器令牌执行范围不变。
+## [0.1.4] - 2026-09-24
+
+### Added
+
+- Added scoped public Agent directory lookup during Node token exchange for online collaboration, without expanding machine-token execution permissions.
 
 ## [0.1.3] - 2026-09-21
 
