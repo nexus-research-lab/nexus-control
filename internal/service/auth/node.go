@@ -35,9 +35,10 @@ type RegisterNodeInput struct {
 }
 
 type NodeTokenResult struct {
-	Token     string    `json:"token"`
-	ExpiresAt time.Time `json:"expires_at"`
-	Agents    []Agent   `json:"agents"`
+	Token     string                `json:"token"`
+	ExpiresAt time.Time             `json:"expires_at"`
+	Agents    []Agent               `json:"agents"`
+	Directory []AgentDirectoryEntry `json:"directory,omitempty"`
 }
 
 func nodeCredentialHash(credential string) (string, error) {
@@ -114,6 +115,14 @@ func (s *Service) Node(ctx context.Context, actor Principal, nodeID string) (Exe
 
 // ExchangeNodeToken 只接受独立设备凭据；普通浏览器 exchange 仍拒绝 Node audience。
 func (s *Service) ExchangeNodeToken(ctx context.Context, credential string) (NodeTokenResult, error) {
+	return s.ExchangeNodeTokenWithDirectory(ctx, credential, nil)
+}
+
+// ExchangeNodeTokenWithDirectory 仅补充当前组织公开身份，不授予远端 Agent 执行权。
+func (s *Service) ExchangeNodeTokenWithDirectory(ctx context.Context, credential string, agentIDs []string) (NodeTokenResult, error) {
+	if len(agentIDs) > 100 {
+		return NodeTokenResult{}, ErrRequestInvalid
+	}
 	now := s.now()
 	hash, err := nodeCredentialHash(credential)
 	if err != nil {
@@ -141,8 +150,20 @@ func (s *Service) ExchangeNodeToken(ctx context.Context, credential string) (Nod
 	if err != nil {
 		return NodeTokenResult{}, err
 	}
+	var directory []AgentDirectoryEntry
+	if len(agentIDs) > 0 {
+		entries, err := s.ListOrganizationAgents(ctx, actor)
+		if err != nil {
+			return NodeTokenResult{}, err
+		}
+		for _, entry := range entries {
+			if slices.Contains(agentIDs, entry.AgentID) {
+				directory = append(directory, entry)
+			}
+		}
+	}
 	actor.ParentSessionID, actor.SessionID, actor.NodeID = actor.SessionID, "node:"+node.NodeID, node.NodeID
 	actor.Role, actor.AuthMethod, actor.AgentIDs = "node", "node", node.AgentIDs
 	token, err := s.signer.Sign(actor, relayNodeAudience, now, nodeTokenTTL)
-	return NodeTokenResult{Token: token, ExpiresAt: now.Add(nodeTokenTTL), Agents: agents}, err
+	return NodeTokenResult{Token: token, ExpiresAt: now.Add(nodeTokenTTL), Agents: agents, Directory: directory}, err
 }

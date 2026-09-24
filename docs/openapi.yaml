@@ -112,6 +112,18 @@ paths:
   /auth/v1/nodes/token:
     post:
       operationId: exchangeExecutionNodeToken
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                agent_ids:
+                  type: array
+                  maxItems: 100
+                  items: {type: string}
+                  description: 可选公开目录查询；data.directory 仅返回当前组织内匹配的 agent_id、owner_user_id、name、avatar，不含本地配置，不扩大签名执行范围。
       security: [{NodeCredential: []}]
       description: 不使用 Cookie。返回 data.token、expires_at 和已校验归属的 agents；令牌固定 nexus-relay-node audience、15 分钟期限和签名 Agent 范围。浏览器自然到期不影响设备续签，父 Session 主动撤销、设备撤销、改密或 Agent 不再属于本人时拒绝。
       responses:

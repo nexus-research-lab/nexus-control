@@ -54,6 +54,18 @@ func TestNodeGrantScopeReplayAndRevocation(t *testing.T) {
 		t.Fatal(err)
 	}
 	claims := verifyTestPrincipal(t, service.signer, issued.Token)
+	peer, err := service.PublishAgent(ctx, *owner, PublishAgentInput{SourceAgentID: "peer", Name: "Peer"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	withDirectory, err := service.ExchangeNodeTokenWithDirectory(ctx, input.Credential, []string{peer.AgentID, "foreign-agent"})
+	if err != nil || len(withDirectory.Directory) != 1 || withDirectory.Directory[0].AgentID != peer.AgentID {
+		t.Fatalf("公开目录范围错误: %+v %v", withDirectory.Directory, err)
+	}
+	directoryClaims := verifyTestPrincipal(t, service.signer, withDirectory.Token)
+	if len(directoryClaims.AgentIDs) != 1 || directoryClaims.AgentIDs[0] != agent.AgentID {
+		t.Fatal("读取目录扩大了机器执行范围")
+	}
 	if claims.ExpiresAt-claims.IssuedAt != int64(nodeTokenTTL/time.Second) {
 		t.Fatal("unexpected node token lifetime")
 	}

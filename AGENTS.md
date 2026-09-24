@@ -4,6 +4,8 @@
 
 ## 边界
 
+- `/auth/v1/nodes/token` 可附带最多 100 个 `agent_ids`，返回同组织的公开 `directory`；不返回其他 Agent 的本地 source ID，不扩张令牌 `agent_ids`，不授予真人 API 访问权。
+
 - User 独立于 Organization；一个账号最多一个 active 组织，无组织仍可登录和使用个人能力。`Principal.role` 仅表示平台/Deployment 角色，`organization_role` 表示组织角色，禁止互相推导。
 - 新组织事件使用 `organization_changed`，必须携带 organization_id，移出时 membership_revoked=true；不复用历史上同时撤销平台访问的 principal_changed，避免错误保留旧平台授权或中断私人 Agent。
 - `organization.go` 实现创建、改名、退出、移交、解散与已有账号接受邀请；`registration.go` 支持显式开启的普通账号注册。所有组织写入在身份事务锁内重验权限。唯一 active owner 由部分唯一索引保障，仅移交操作可更换。

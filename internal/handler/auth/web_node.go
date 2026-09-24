@@ -75,7 +75,13 @@ func (s *HTTPServer) nodeToken(w http.ResponseWriter, r *http.Request) {
 		s.writeServiceError(w, r, authservice.ErrUnauthenticated)
 		return
 	}
-	result, err := s.service.ExchangeNodeToken(r.Context(), credential)
+	var input struct {
+		AgentIDs []string `json:"agent_ids"`
+	}
+	if r.ContentLength != 0 && !s.decode(w, r, &input) {
+		return
+	}
+	result, err := s.service.ExchangeNodeTokenWithDirectory(r.Context(), credential, input.AgentIDs)
 	if err != nil {
 		s.writeServiceError(w, r, err)
 		return
