@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed read-only SQLite import paths on Windows and made the log directory permission test respect Windows ACL semantics.
+
 ## [0.1.4] - 2026-09-24
 
 ### Added

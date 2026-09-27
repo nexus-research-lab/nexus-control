@@ -493,7 +493,12 @@ func openReadOnlySQLite(sourcePath string) (*sql.DB, error) {
 	if err != nil {
 		return nil, errors.New("源 SQLite 路径无效")
 	}
-	sourceURL := (&url.URL{Scheme: "file", Path: absolutePath}).String() + "?mode=ro"
+	// SQLite 文件 URI 使用正斜杠，Windows 盘符前必须保留根斜杠。
+	uriPath := filepath.ToSlash(absolutePath)
+	if filepath.VolumeName(absolutePath) != "" && !strings.HasPrefix(uriPath, "/") {
+		uriPath = "/" + uriPath
+	}
+	sourceURL := (&url.URL{Scheme: "file", Path: uriPath}).String() + "?mode=ro"
 	source, err := sql.Open("sqlite", sourceURL)
 	if err != nil {
 		return nil, err

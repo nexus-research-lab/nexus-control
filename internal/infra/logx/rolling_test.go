@@ -3,6 +3,7 @@ package logx
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -21,7 +22,8 @@ func TestRollingFileWriterCreatesPrivateControlDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("读取 Control 目录失败: %v", err)
 	}
-	if permissions := info.Mode().Perm(); permissions != 0o700 {
+	// Windows 使用 ACL；os.FileMode 不表示 POSIX 目录权限。
+	if permissions := info.Mode().Perm(); runtime.GOOS != "windows" && permissions != 0o700 {
 		t.Fatalf("Control 目录权限 = %o，期望 700", permissions)
 	}
 }

@@ -10,6 +10,8 @@ Node 授权使用 `/auth/v1/nodes` 注册、列出（最近 100 条）与撤销�
 
 在同级 `nexus` 仓运行 `make dev` 会一并启动 Control。单独启动时可将 [`env.example`](./env.example) 复制为 `.env` 后运行 `make run`；程序依次尝试当前目录和上级目录的 `.env`，且不会覆盖已经存在的进程环境变量。SQLite 数据库默认位于 `~/.nexus/control/data/control.db`，服务凭据与签名密钥位于 `~/.nexus/control/`；生产部署应显式设置路径和服务凭据。
 
+Windows 安装 Go 和 GNU Make 后可直接使用 `make run`、`make test`、`make check`。PowerShell 中设置环境变量使用 `$env:CONTROL_ADDRESS = "127.0.0.1:8020"`；下文导入示例的多行命令可合并为一行执行。Windows SQLite 导入支持带盘符的本机路径。
+
 日志使用与 Nexus Server 相同的结构化输出、终端 pretty 模式和滚动策略。默认同时写入 stdout 与 `~/.nexus/control/logs/logger-YYYY-MM-DD.log`；可通过 `LOG_LEVEL`、`LOG_FORMAT`、`LOG_STDOUT`、`LOG_FILE_ENABLED`、`LOG_PATH`、`LOG_ROTATE_DAILY`、`LOG_MAX_SIZE_MB`、`LOG_MAX_AGE_DAYS`、`LOG_MAX_BACKUPS`、`LOG_COMPRESS` 与 `LOG_NO_COLOR` 调整。
 
 SQLite 是单机默认值。使用 PostgreSQL 时配置：
