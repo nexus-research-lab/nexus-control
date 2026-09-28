@@ -72,58 +72,6 @@ func (s *Service) VerifyOrganizationMembers(
 	return nil
 }
 
-// CreateMember 创建密码账号并加入当前 Deployment。
-func (s *Service) CreateMember(ctx context.Context, actor Principal, input CreateMemberInput) (*DeploymentMember, error) {
-	if actor.OrganizationRole != RoleOwner && actor.OrganizationRole != RoleAdmin {
-		return nil, ErrForbidden
-	}
-	username, err := normalizeUsername(input.Username)
-	if err != nil {
-		return nil, errors.Join(ErrRequestInvalid, err)
-	}
-	if err = validatePassword(input.Password); err != nil {
-		return nil, errors.Join(ErrRequestInvalid, err)
-	}
-	role, err := normalizeRole(input.Role)
-	if err != nil || role == RoleOwner {
-		return nil, errors.Join(ErrRequestInvalid, err)
-	}
-	if actor.OrganizationRole == RoleAdmin && role != RoleMember {
-		return nil, ErrForbidden
-	}
-	displayName := strings.TrimSpace(input.DisplayName)
-	if displayName == "" {
-		displayName = username
-	}
-	if len(displayName) > 128 {
-		return nil, errors.Join(ErrRequestInvalid, errors.New("显示名称不能超过 128 个字符"))
-	}
-	passwordHash, err := hashPassword(input.Password)
-	if err != nil {
-		return nil, err
-	}
-	record, err := s.repository.CreateMember(ctx, actor.UserID, store.NewMemberRecord{
-		DeploymentID:   actor.DeploymentID,
-		OrganizationID: actor.OrganizationID,
-		UserID:         newID("user"),
-		IdentityID:     newID("idn"),
-		CredentialID:   newID("cred"),
-		Username:       username,
-		DisplayName:    displayName,
-		PasswordHash:   passwordHash,
-		Role:           role,
-		CreatedAt:      s.now(),
-	})
-	if errors.Is(err, store.ErrUsernameConflict) {
-		return nil, errors.Join(ErrConflict, errors.New("用户名已存在"))
-	}
-	if err != nil {
-		return nil, err
-	}
-	member := memberFromRecord(*record)
-	return &member, nil
-}
-
 // UpdateMember 更新成员角色或状态。
 func (s *Service) UpdateMember(ctx context.Context, actor Principal, userID string, input UpdateMemberInput) (*DeploymentMember, error) {
 	if actor.OrganizationRole != RoleOwner && actor.OrganizationRole != RoleAdmin {
@@ -198,7 +146,7 @@ func memberFromRecord(record store.DeploymentMemberRecord) DeploymentMember {
 		DeploymentID: record.DeploymentID, UserID: record.UserID,
 		Username: record.Username, DisplayName: record.DisplayName,
 		Role: record.Role, MembershipStatus: record.MembershipStatus,
-		Avatar: record.Avatar, LastLoginAt: record.LastLoginAt,
+		WebAccessDisabled: record.WebAccessDisabled, Avatar: record.Avatar, LastLoginAt: record.LastLoginAt,
 		CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt,
 	}
 }

@@ -46,16 +46,17 @@ type User struct {
 
 // DeploymentMember 是账号资料与当前 Deployment membership 的联合读模型。
 type DeploymentMember struct {
-	DeploymentID     string     `json:"deployment_id"`
-	UserID           string     `json:"user_id"`
-	Username         string     `json:"username"`
-	DisplayName      string     `json:"display_name"`
-	Role             string     `json:"role"`
-	MembershipStatus string     `json:"membership_status"`
-	Avatar           string     `json:"avatar,omitempty"`
-	LastLoginAt      *time.Time `json:"last_login_at,omitempty"`
-	CreatedAt        time.Time  `json:"created_at"`
-	UpdatedAt        time.Time  `json:"updated_at"`
+	DeploymentID      string     `json:"deployment_id"`
+	UserID            string     `json:"user_id"`
+	Username          string     `json:"username"`
+	DisplayName       string     `json:"display_name"`
+	Role              string     `json:"role"`
+	MembershipStatus  string     `json:"membership_status"`
+	WebAccessDisabled bool       `json:"web_access_disabled"`
+	Avatar            string     `json:"avatar,omitempty"`
+	LastLoginAt       *time.Time `json:"last_login_at,omitempty"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
 }
 
 // MemberDirectoryEntry 是普通成员可见的最小 Deployment 人员目录。

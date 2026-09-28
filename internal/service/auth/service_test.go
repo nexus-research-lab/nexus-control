@@ -125,7 +125,7 @@ func runControlConformance(t *testing.T, cfg config.Config) {
 	if _, _, err = service.ExchangePrincipal(ctx, login.SessionToken, "nexus-relay-node"); !errors.Is(err, ErrRequestInvalid) {
 		t.Fatalf("relay node audience err = %v", err)
 	}
-	member, err := service.CreateMember(ctx, *owner, CreateMemberInput{
+	member, err := createOrganizationTestMember(t, service, *owner, CreateMemberInput{
 		Username: "member", Password: "password-456", Role: RoleMember,
 	})
 	if err != nil || member.UserID == "" {

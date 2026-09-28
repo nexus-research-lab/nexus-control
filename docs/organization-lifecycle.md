@@ -25,3 +25,9 @@ App/Web 都使用「设置 → 账户 → 组织」。本地身份仅显示远�
 Control、Nexus、Relay 需协调升级：先停止在线协作入口，备份数据库，升级 Control 并完成迁移，再升级 Nexus 与 Relay、恢复入口。旧 token 没有 organization_role，新 Relay 会拒绝；必须重新交换令牌，不做平台角色兜底。无需修改或迁移 App 用户数据目录。
 
 解散组织是关闭协作权限，不物理清除历史消息；大数据清理和保留策略不在本次操作内。当前仅支持一个 active 组织，尚不提供多组织切换。公开注册若要开放，部署者显式设置 `CONTROL_REGISTRATION_ENABLED=true`；不开放时通过组织邀请注册或既有管理账号创建。
+
+## 独立 Web 用户
+
+平台 owner/admin 在“设置 → 运营 → 部署用户”或主智能体 `members` 域创建账号，不要求自己属于组织。新账号具有 Web 访问资格，组织身份为空；加入组织由本人接受邀请或自行创建。平台 admin 仅能创建和管理 member，owner 可管理 admin/member；组织 owner/admin 不因此取得平台权限。
+
+`GET/POST/PATCH /auth/v1/deployment-members[/{user_id}]` 与内部 `/internal/deployment-members/manage` 管理 Deployment membership。停用撤销部署访问和现有 Session，保留组织关系和数据；恢复部署访问不会恢复旧 Session。`GET/PATCH /auth/v1/members[/{user_id}]` 继续管理当前 Organization，组织新增成员只能使用邀请。

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Restored organization-independent Web user management for platform owners/admins through deployment-members and the session-bound members API. New users receive Web access without joining an organization; organization membership management remains separate.
+
 ## [0.1.4] - 2026-09-24
 
 ### Added

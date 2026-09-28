@@ -10,7 +10,7 @@ import (
 	"net/http"
 )
 
-func (s *HTTPServer) internalManageMembers(w http.ResponseWriter, r *http.Request) {
+func (s *HTTPServer) internalManageDeploymentMembers(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		ActorUserID     string          `json:"actor_user_id"`
 		SessionID       string          `json:"session_id"`
@@ -30,11 +30,11 @@ func (s *HTTPServer) internalManageMembers(w http.ResponseWriter, r *http.Reques
 	var result any
 	switch input.Operation {
 	case "list":
-		result, err = s.service.ListMembers(r.Context(), *principal)
+		result, err = s.service.ListDeploymentMembers(r.Context(), *principal)
 	case "create":
 		var value authservice.CreateMemberInput
 		if err = decodeManagedMemberInput(input.Input, &value); err == nil {
-			result, err = s.service.CreateMember(r.Context(), *principal, value)
+			result, err = s.service.CreateDeploymentMember(r.Context(), *principal, value)
 		}
 	case "update", "remove":
 		var value authservice.UpdateMemberInput
@@ -49,7 +49,7 @@ func (s *HTTPServer) internalManageMembers(w http.ResponseWriter, r *http.Reques
 			break
 		}
 		value.ExpectedVersion = &input.ExpectedVersion
-		result, err = s.service.UpdateMember(r.Context(), *principal, input.Target, value)
+		result, err = s.service.UpdateDeploymentMember(r.Context(), *principal, input.Target, value)
 	default:
 		err = authservice.ErrRequestInvalid
 	}

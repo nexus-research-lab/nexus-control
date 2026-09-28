@@ -19,7 +19,7 @@
 - Node 精确回执查询按 Deployment、Organization、Owner 三重限定，不依赖最近 100 条设备列表；登记记录不代表父 Session 仍有效，执行资格仍由机器令牌交换重新校验。
 - 撤销未知 Node ID 也在身份写事务中保留终止记录（凭据哈希使用不可签发前缀），阻断迟到注册。已注册 Node 撤销才需要发布失效事件；不存在的 Node 不可能已有执行租约。
 - `execution_nodes` 保留浏览器父 Session 作为注册来源和撤销栅栏，但续签不依赖浏览器自然到期；登录清理保留仍被设备引用的 Session，旧 Cookie 仍按原期限失效。撤销节点写 `session_revoked`（`session_id=node:<node_id>`）；父 Session 主动撤销、改密和组织撤权使设备失效。普通 Principal exchange 不接受 Node audience。SQLite→PostgreSQL 导入不迁移 Session 或 Node 授权，设备必须重新授权。
-- 浏览器登录、登出、资料、改密、初始化、Organization 邀请、成员目录、成员和订阅运营 API 固定在 `/auth/v1`，服务 API 固定在 `/api/control/v1`；邀请 token 只存哈希且单次消费，成员读取和变更只作用于当前 Organization，破坏性变更使用新主版本。
+- 浏览器登录、登出、资料、改密、初始化、Organization 邀请、成员目录、成员和订阅运营 API 固定在 `/auth/v1`，服务 API 固定在 `/api/control/v1`；邀请 token 只存哈希且单次消费，`/members` 读取和变更只作用于当前 Organization；`/deployment-members` 和内部 `/internal/deployment-members/manage` 只按平台角色管理部署用户，新用户可访问 Web、没有组织，破坏性变更使用新主版本。
 - 账号、Session 或 entitlement 写入必须在同一事务追加对应失效事件：单 Session 登出用 `session_revoked`，纯资料变更用 `profile_changed`，权限或账号状态变更用 `principal_changed`，套餐或成员额度变更用 `entitlement_changed`。
 - 所有产生身份失效事件的事务先通过 `beginIdentityWrite` 锁定 Control 状态，再取业务锁；导入复用相同状态锁。不能仅依赖 PostgreSQL 自增 ID，否则晚提交的小 ID 会被消费游标越过。
 - 组织撤权事件同时携带 `organization_id` 与 `membership_revoked`，供 Relay 同事务撤销 Room 真人/Agent 成员与执行资格；Agent 目录、归属校验和发布都要求其所有者当前仍有有效组织与部署访问。SQLite→PostgreSQL 导入必须保留失效事件原 ID 并推进目标序列，不能令已有 Relay 游标越过后续撤权。
@@ -45,3 +45,5 @@
 - 用户可见改动同步更新 `CHANGELOG.md` 的 `## [Unreleased]`。
 
 `internal/handler/auth/member_management.go` 承载 Nexus 宿主的成员操作，要求服务凭据与有效管理员 Session；角色与 Deployment 从 Session 推导，更新使用成员快照版本校验，显示名称变更通知全部有效部署。
+
+- `internal/{service,storage}/auth/deployment_member.go` 独立管理平台用户；平台 owner/admin 无需组织，admin 只管理 member，owner 仅管理 admin/member，禁止通过该入口变更 owner。创建显式开启 Web 访问，不写组织成员关系；部署停用撤销 Session 并发布 principal_changed，组织关系和本地数据保留。`member.go` 继续拥有组织目录与治理，不能由组织角色取得平台用户管理权。

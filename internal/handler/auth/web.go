@@ -196,7 +196,7 @@ func (s *HTTPServer) webMemberDirectory(w http.ResponseWriter, r *http.Request) 
 	s.writeData(w, r, members)
 }
 
-func (s *HTTPServer) webCreateMember(w http.ResponseWriter, r *http.Request) {
+func (s *HTTPServer) webCreateDeploymentMember(w http.ResponseWriter, r *http.Request) {
 	if !s.requireWebMutationOrigin(w, r) {
 		return
 	}
@@ -208,7 +208,7 @@ func (s *HTTPServer) webCreateMember(w http.ResponseWriter, r *http.Request) {
 	if !s.decode(w, r, &input) {
 		return
 	}
-	member, err := s.service.CreateMember(r.Context(), *principal, input)
+	member, err := s.service.CreateDeploymentMember(r.Context(), *principal, input)
 	if err != nil {
 		s.writeServiceError(w, r, err)
 		return
@@ -356,4 +356,37 @@ func webClientIP(r *http.Request) string {
 		return host
 	}
 	return strings.TrimSpace(r.RemoteAddr)
+}
+
+func (s *HTTPServer) webDeploymentMembers(w http.ResponseWriter, r *http.Request) {
+	principal, ok := s.requireWebPrincipal(w, r)
+	if !ok {
+		return
+	}
+	members, err := s.service.ListDeploymentMembers(r.Context(), *principal)
+	if err != nil {
+		s.writeServiceError(w, r, err)
+		return
+	}
+	s.writeData(w, r, members)
+}
+
+func (s *HTTPServer) webUpdateDeploymentMember(w http.ResponseWriter, r *http.Request) {
+	if !s.requireWebMutationOrigin(w, r) {
+		return
+	}
+	principal, ok := s.requireWebPrincipal(w, r)
+	if !ok {
+		return
+	}
+	var input authservice.UpdateMemberInput
+	if !s.decode(w, r, &input) {
+		return
+	}
+	member, err := s.service.UpdateDeploymentMember(r.Context(), *principal, r.PathValue("user_id"), input)
+	if err != nil {
+		s.writeServiceError(w, r, err)
+		return
+	}
+	s.writeData(w, r, member)
 }

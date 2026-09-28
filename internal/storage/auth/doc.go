@@ -8,6 +8,7 @@
 //   - organization.go / registration.go：事务内实时权限、组织生命周期与独立账号注册。
 //   - session.go：登录凭据、Session 生命周期和设备所有者校验；保留设备注册来源而不延长 Cookie。
 //   - node.go：浏览器绑定的设备授权、凭据哈希、精确回执与撤销事务。
+//   - deployment_member.go：不依赖组织的平台用户创建、角色管理和部署访问撤销。
 //   - member.go / identity_invalidation.go：组织成员事务与按提交顺序可消费的身份失效序列；身份写入先锁 Control 状态再锁业务行。
 //   - entitlement.go：Deployment 套餐、成员有效额度与同事务额度失效事件。
 //   - password.go：密码修改的 exact request 回执、CAS 提交与设备撤权同事务完成。

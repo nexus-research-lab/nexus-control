@@ -38,7 +38,7 @@ func TestImportControlSQLitePreservesAuthority(t *testing.T) {
 	if _, err = sourceService.Login(ctx, LoginInput{Username: "admin", Password: "password-123"}); err != nil {
 		t.Fatal(err)
 	}
-	member, err := sourceService.CreateMember(ctx, *owner, CreateMemberInput{
+	member, err := createOrganizationTestMember(t, sourceService, *owner, CreateMemberInput{
 		Username: "member", DisplayName: "Member", Password: "password-456", Role: RoleAdmin,
 	})
 	if err != nil {

@@ -80,16 +80,17 @@ type SubscriptionAccountRecord struct {
 }
 
 type DeploymentMemberRecord struct {
-	DeploymentID     string
-	UserID           string
-	Username         string
-	DisplayName      string
-	Role             string
-	MembershipStatus string
-	Avatar           string
-	LastLoginAt      *time.Time
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	DeploymentID      string
+	UserID            string
+	Username          string
+	DisplayName       string
+	Role              string
+	MembershipStatus  string
+	WebAccessDisabled bool
+	Avatar            string
+	LastLoginAt       *time.Time
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }
 
 type AgentRecord struct {
@@ -137,16 +138,15 @@ type OwnerRecord struct {
 }
 
 type NewMemberRecord struct {
-	DeploymentID   string
-	OrganizationID string
-	UserID         string
-	IdentityID     string
-	CredentialID   string
-	Username       string
-	DisplayName    string
-	PasswordHash   string
-	Role           string
-	CreatedAt      time.Time
+	DeploymentID string
+	UserID       string
+	IdentityID   string
+	CredentialID string
+	Username     string
+	DisplayName  string
+	PasswordHash string
+	Role         string
+	CreatedAt    time.Time
 }
 
 type OrganizationInvitationRecord struct {

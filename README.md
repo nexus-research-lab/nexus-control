@@ -21,7 +21,7 @@ CONTROL_DATABASE_URL=postgres://nexus_control:password@postgres:5432/nexus
 
 PostgreSQL 表固定写入 `control` schema；连接会强制使用该 `search_path`。数据库账号需要能创建该 schema，或由管理员预先创建并授权。签名密钥和服务凭据仍由 `CONTROL_DATA_DIR` 指向的本地持久目录保存，不写入数据库。
 
-首次平台 owner 可在 Nexus Web 的 `/setup` 页面创建，也可由安装器调用 `POST /api/control/v1/setup/owner`，或设置 `AUTH_INIT_OWNER_PASSWORD` 由服务启动时初始化。Web 初始化需额外设置至少 32 个字符的 `CONTROL_SETUP_TOKEN`；该 capability 不会保存在浏览器中。所有远程用户通过「设置 → 账户 → 组织」创建或管理组织；无组织账号可自行创建，创建者只获得组织 owner，平台订阅运营仍由平台 owner/admin 管理。组织邀请默认七天过期、单次消费，只存 token 哈希；支持新账号注册和已有账号登录后加入。公开注册需显式设置 `CONTROL_REGISTRATION_ENABLED=true`，默认关闭。完整权限与退出/移交/解散规则见 [组织生命周期](docs/organization-lifecycle.md)。
+首次平台 owner 可在 Nexus Web 的 `/setup` 页面创建，也可由安装器调用 `POST /api/control/v1/setup/owner`，或设置 `AUTH_INIT_OWNER_PASSWORD` 由服务启动时初始化。Web 初始化需额外设置至少 32 个字符的 `CONTROL_SETUP_TOKEN`；该 capability 不会保存在浏览器中。平台 owner/admin 无需组织即可通过「设置 → 运营 → 部署用户」或主智能体 `members` 创建可访问 Web 的独立账号，新账号不会自动加入组织。所有远程用户通过「设置 → 账户 → 组织」创建或管理组织；无组织账号可自行创建，创建者只获得组织 owner，平台订阅运营仍由平台 owner/admin 管理。组织邀请默认七天过期、单次消费，只存 token 哈希；支持新账号注册和已有账号登录后加入。公开注册需显式设置 `CONTROL_REGISTRATION_ENABLED=true`，默认关闭。完整权限与退出/移交/解散规则见 [组织生命周期](docs/organization-lifecycle.md)。
 
 签名私钥默认生成到 `CONTROL_DATA_DIR` 下的 `control-signing.key`，公钥写入 `control-signing.pub`，供 Nexus Server 与 Nexus Relay 只读加载。Runtime audience 默认为 `nexus-runtime`，Relay User audience 固定为 `nexus-relay-user`；Relay Node 凭据不属于本阶段。生产网关只需同源转发 `/auth/v1/*` 到 Control、`/nexus/v1/*` 到 Nexus Server；`/api/control/v1/internal/*` 不应暴露到公网。
 

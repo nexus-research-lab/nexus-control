@@ -78,7 +78,7 @@ func TestWebSetupLoginAndMemberAdministration(t *testing.T) {
 		t.Fatalf("setup payload = %+v", setupPayload.Data)
 	}
 
-	invalidRole := doWebJSON(t, client, http.MethodPost, server.URL+"/auth/v1/members", server.URL, map[string]any{
+	invalidRole := doWebJSON(t, client, http.MethodPost, server.URL+"/auth/v1/deployment-members", server.URL, map[string]any{
 		"username": "invalid", "password": "password-456", "role": "superuser",
 	}, "")
 	defer invalidRole.Body.Close()
@@ -86,7 +86,7 @@ func TestWebSetupLoginAndMemberAdministration(t *testing.T) {
 		t.Fatalf("invalid role status = %d", invalidRole.StatusCode)
 	}
 
-	created := doWebJSON(t, client, http.MethodPost, server.URL+"/auth/v1/members", server.URL, map[string]any{
+	created := doWebJSON(t, client, http.MethodPost, server.URL+"/auth/v1/deployment-members", server.URL, map[string]any{
 		"username": "member", "display_name": "Member", "password": "password-456", "role": "member",
 	}, "")
 	defer created.Body.Close()
@@ -105,6 +105,18 @@ func TestWebSetupLoginAndMemberAdministration(t *testing.T) {
 	setupPrincipal, err := service.ResolveSession(ctx, setupSessionToken)
 	if err != nil || setupPrincipal == nil {
 		t.Fatalf("resolve setup session: principal = %+v, err = %v", setupPrincipal, err)
+	}
+	// 部署创建不能隐式入组；组织测试通过现有账号接受邀请显式加入。
+	memberPrincipal, err := service.Login(ctx, authservice.LoginInput{Username: "member", Password: "password-456"})
+	if err != nil || memberPrincipal.Principal.OrganizationID != "" || memberPrincipal.Principal.WebAccessDisabled {
+		t.Fatalf("独立 Web 账号: %+v %v", memberPrincipal, err)
+	}
+	invite, err := service.CreateOrganizationInvitation(ctx, *setupPrincipal, authservice.CreateOrganizationInvitationInput{Role: "member"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = service.JoinOrganization(ctx, memberPrincipal.Principal, invite.Token); err != nil {
+		t.Fatal(err)
 	}
 	now := time.Now().UTC()
 	for _, statement := range []struct {
@@ -246,8 +258,9 @@ func TestWebSetupLoginAndMemberAdministration(t *testing.T) {
 		t.Fatal(err)
 	}
 	if invalidationResponse.StatusCode != http.StatusOK ||
-		len(invalidationPayload.Data.Events) != 1 ||
-		invalidationPayload.Data.Events[0].UserID != createdPayload.Data.UserID {
+		len(invalidationPayload.Data.Events) != 2 ||
+		!invalidationPayload.Data.Events[1].MembershipRevoked ||
+		invalidationPayload.Data.Events[1].UserID != createdPayload.Data.UserID {
 		t.Fatalf(
 			"identity invalidations status = %d, data = %+v",
 			invalidationResponse.StatusCode,
@@ -263,7 +276,7 @@ func TestWebSetupLoginAndMemberAdministration(t *testing.T) {
 		t.Fatalf("revoked member login status = %d", revokedMemberLogin.StatusCode)
 	}
 
-	crossOrigin := doWebJSON(t, client, http.MethodPost, server.URL+"/auth/v1/members", "https://evil.example", map[string]any{
+	crossOrigin := doWebJSON(t, client, http.MethodPost, server.URL+"/auth/v1/deployment-members", "https://evil.example", map[string]any{
 		"username": "blocked", "password": "password-789", "role": "member",
 	}, "")
 	defer crossOrigin.Body.Close()
@@ -421,7 +434,7 @@ func TestWebSetupLoginAndMemberAdministration(t *testing.T) {
 		logoutCookies[0].Path != "/" || logoutCookies[0].MaxAge >= 0 {
 		t.Fatalf("logout status = %d, cookies = %+v", logout.StatusCode, logoutCookies)
 	}
-	events, err := service.ListIdentityInvalidations(ctx, 1, 10)
+	events, err := service.ListIdentityInvalidations(ctx, 2, 10)
 	if err != nil {
 		t.Fatal(err)
 	}

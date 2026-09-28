@@ -67,7 +67,9 @@ func (s *HTTPServer) mount() {
 	s.router.HandleFunc("POST "+webBase+"/nodes/token", s.nodeToken)
 	s.router.HandleFunc("GET "+webBase+"/directory/agents", s.webAgentDirectory)
 	s.router.HandleFunc("PUT "+webBase+"/agents/{source_agent_id}", s.webPublishAgent)
-	s.router.HandleFunc("POST "+webBase+"/members", s.webCreateMember)
+	s.router.HandleFunc("GET "+webBase+"/deployment-members", s.webDeploymentMembers)
+	s.router.HandleFunc("POST "+webBase+"/deployment-members", s.webCreateDeploymentMember)
+	s.router.HandleFunc("PATCH "+webBase+"/deployment-members/{user_id}", s.webUpdateDeploymentMember)
 	s.router.HandleFunc("PATCH "+webBase+"/members/{user_id}", s.webUpdateMember)
 	s.router.HandleFunc("GET "+webBase+"/organization/invitations", s.webListOrganizationInvitations)
 	s.router.HandleFunc("POST "+webBase+"/organization/invitations", s.webCreateOrganizationInvitation)
@@ -94,7 +96,7 @@ func (s *HTTPServer) mount() {
 	internal.HandleFunc("POST "+base+"/internal/humans/verify", s.internalVerifyHuman)
 	internal.HandleFunc("POST "+base+"/internal/organizations/members/verify", s.internalVerifyOrganizationMembers)
 	internal.HandleFunc("POST "+base+"/internal/agents/verify", s.internalVerifyAgents)
-	internal.HandleFunc("POST "+base+"/internal/members/manage", s.internalManageMembers)
+	internal.HandleFunc("POST "+base+"/internal/deployment-members/manage", s.internalManageDeploymentMembers)
 	internal.HandleFunc("GET "+base+"/internal/users/{user_id}/role", s.internalRole)
 	internal.HandleFunc(
 		"GET "+base+"/internal/deployments/{deployment_id}/users/{user_id}/entitlement",

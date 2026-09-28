@@ -216,3 +216,22 @@ func TestOrganizationLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// createOrganizationTestMember 让组织测试显式通过邀请加入，不依赖部署用户创建的副作用。
+func createOrganizationTestMember(t *testing.T, s *Service, owner Principal, input CreateMemberInput) (*DeploymentMember, error) {
+	t.Helper()
+	invite, err := s.CreateOrganizationInvitation(t.Context(), owner, CreateOrganizationInvitationInput{Role: input.Role})
+	if err != nil {
+		return nil, err
+	}
+	user, err := s.AcceptOrganizationInvitation(t.Context(), AcceptOrganizationInvitationInput{Token: invite.Token, Username: input.Username, DisplayName: input.DisplayName, Password: input.Password})
+	if err != nil {
+		return nil, err
+	}
+	record, err := s.repository.MemberByID(t.Context(), owner.DeploymentID, owner.OrganizationID, user.UserID)
+	if err != nil {
+		return nil, err
+	}
+	member := memberFromRecord(*record)
+	return &member, nil
+}
